@@ -1,0 +1,1022 @@
+---
+title: "scRNA analysis"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true # table of content true
+    toc_depth: 1
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+    number_sections: false  ## if you want number sections at each table header
+    theme: united  # many options for theme, this one is my favorite.
+    highlight: tango  # specifies the syntax highlighting style
+---
+
+# Load cell-ranger feature_by_cell matrices 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+library(stringr)
+library(dplyr)
+library(Seurat)
+library(patchwork)
+library(ggplot2)
+library(openxlsx)
+library(harmony)
+library(SingleR)
+
+# Directories
+proj_path <- "/ix/djishnu/Zarifeh/ML_MM"
+data_path <- file.path(proj_path, "Aditi/")
+sc_sample_paths <- paste0(data_path, rep(c("aging_F7", "aging_F15", "aging_M4", "aging_M11")))
+count_paths <- file.path(sc_sample_paths, "outs/filtered_feature_bc_matrix") # input to seurat from cell-ranger
+result_path <- "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/Clustering2"
+## experiment <- "03-14-23_scRNA_analysis"
+experiment <- "Aging"
+## experiment <- "04-11-23_scRNA_cite"
+experiment_path <- file.path(result_path, experiment)
+dir.create(experiment_path, recursive = TRUE)
+out_path <- experiment_path
+## settings
+sample_names <- c("F7_KO", "F15_WT", "M4_KO", "M11_WT")
+```
+
+# Params for clustering (low resolution to get fewer clusters)
+
+``` {r clustering}
+# Set number of dimensions & resolution values to be used in clustering
+nDims <- 18
+cluster_resolution <- 0.6 # modularity type param
+cluster_seurat <- FindClusters(cluster_seurat, resolution = cluster_resolution, verbose = FALSE)
+cluster_seurat <- RunUMAP(cluster_seurat, dims = 1:nDims)
+DimPlot(cluster_seurat, label = TRUE)
+# initial seurat_obj has these clusters (high number)
+# ggplot2::ggsave(file.path(out_path, "clusters_all.png"))
+```
+
+# Load the QC filtered object with cell embeddings for clustering
+
+``` {r Reading seurat object}
+# reads the QC pre-processed seurat obj
+cluster_seurat <- readRDS("/ix/djishnu/Zarifeh/ML_MM/Aditi/result/Aging/Agingcluster_seurat.rds")
+```
+
+``` {r Marker genes per cell-type of interest}
+markers_Adipocyte <- c(
+  "Acaca",
+  "Car3",
+  "Tenm4",
+  "Tmem45b",
+  "Pde3b",
+  "Prkar2b",
+  "Slc1a5",
+  "Pparg",
+  "Gm16168",
+  "Ctcflos",
+  "Tshr",
+  "Slc1a3",
+  "Fgf14",
+  "Negr1",
+  "4933406I18Rik",
+  "Acsl1",
+  "Sik2",
+  "Nrg4",
+  "Lipe",
+  "Plin1",
+  "Fabp4",
+  "Fam13a",
+  "Cidec",
+  "Acvr1c",
+  "Adipor2",
+  "Fasn",
+  "Ankef1",
+  "Pck1",
+  "Slc36a2",
+  "Rgs7"
+)
+
+markers_NMJ_post <- c(
+  "Ano4",
+  "Prkar1a",
+  "Phldb2",
+  "Ncam1",
+  "Colq",
+  "Col19a1",
+  "Ablim2",
+  "Pdzrn4",
+  "Hs6st2",
+  "Gramd1b",
+  "Chrne",
+  "Col4a3",
+  "Vav3",
+  "Lrfn5",
+  "Rps6ka1",
+  "Etv5",
+  "Calcrl",
+  "Map3k7cl",
+  "Ryr3",
+  "Ufsp1",
+  "Epb41l4a",
+  "Col13a1",
+  "B4galnt3",
+  "Utrn",
+  "Cfap54",
+  "Akap11",
+  "Ache",
+  "Musk",
+  "Ank3",
+  "Kcnq5"
+)
+
+markers_FAP <- c(
+  "Abca8a",
+  "Plxdc2",
+  "Lvrn",
+  "Egfr",
+  "Dcn",
+  "Arhgap24",
+  "Tnxb",
+  "Abca6",
+  "Hmcn2",
+  "Slit3",
+  "Abca8b",
+  "Nova1",
+  "Bmper",
+  "C7",
+  "Fbn1",
+  "Bicc1",
+  "Celf2",
+  "Gsn",
+  "Scara5",
+  "Ebf2",
+  "Pdgfra",
+  "Naaladl2",
+  "Abca9",
+  "Thsd7a",
+  "Man1a",
+  "Dpep1",
+  "Antxr2",
+  "Nav1",
+  "Rbms3",
+  "Fap"
+)
+
+markers_Tendon <- c(
+  "Thbs4",
+  "Itgbl1",
+  "Nox4",
+  "Mylk",
+  "Edil3",
+  "Ust",
+  "P3h2",
+  "Ccbe1",
+  "Chodl",
+  "Col12a1",
+  "Myo1d",
+  "Lpar1",
+  "Antxr1",
+  "Piezo2",
+  "Eya2",
+  "Lrrk1",
+  "Tnc",
+  "Ccnd3",
+  "Aff3",
+  "Tshz2",
+  "Abi3bp",
+  "Kirrel3",
+  "Lhfp",
+  "Naaladl2",
+  "Ptprd",
+  "Mpp7",
+  "Nlgn1",
+  "Gpc6",
+  "Ntng1",
+  "Tenm2"
+)
+markers_Myotendinous_junction <- c(
+  "Col22a1",
+  "Erbb4",
+  "Lama2",
+  "Slc24a2",
+  "Atp13a5",
+  "Col24a1",
+  "Limch1",
+  "Fras1",
+  "Adamts20",
+  "Prkg1",
+  "App",
+  "Sgcd",
+  "Rgcc",
+  "Xirp2",
+  "Gm34804",
+  "Atp1b4",
+  "Net1",
+  "Dennd5b",
+  "Usp6nl",
+  "Ldlrad3",
+  "Sorbs2",
+  "Med12l",
+  "Atrnl1",
+  "Mss51",
+  "Cobl",
+  "Hivep3",
+  "Kcnh7",
+  "Angpt1",
+  "Nav3",
+  "Frmpd4"
+)
+markers_Smooth_muscle <- c(
+  "Myh11",
+  "Dgkb",
+  "Acta2",
+  "Cacnb2",
+  "Cacna1c",
+  "Pde3a",
+  "Notch3",
+  "Flna",
+  "Thsd4",
+  "Rbpms",
+  "Cald1",
+  "Carmn",
+  "Sox5",
+  "Mylk",
+  "Ppm1e",
+  "Gucy1a1",
+  "Prkg1",
+  "Itga8",
+  "Ano1",
+  "Frmd4b",
+  "Sntb1",
+  "Mrvi1",
+  "Lmod1",
+  "Olfr78",
+  "Stac",
+  "Gpc6",
+  "Dlc1",
+  "Rgs6",
+  "Synpo2",
+  "Csmd1"
+)
+markers_Pericyte <- c(
+  "Trpc3",
+  "Cacna1c",
+  "Dlc1",
+  "Opcml",
+  "Kalrn",
+  "Lin7a",
+  "Plcl1",
+  "Myo1b",
+  "Rgs5",
+  "Pde8b",
+  "Slc35f1",
+  "Ano1",
+  "Gucy1a2",
+  "Cacnb2",
+  "Il34",
+  "Pdgfrb",
+  "Notch3",
+  "Pde3a",
+  "Prkg1",
+  "Slc24a3",
+  "Cald1",
+  "Eps8",
+  "Plxdc1",
+  "Abcc9",
+  "Sox5",
+  "Mast4",
+  "Adap2",
+  "Mrvi1",
+  "Gucy1a1",
+  "Sgip1"
+)
+
+markers_Satellite_cell <- c(
+  "Hs6st3",
+  "Chodl",
+  "Pax7",
+  "Csmd1",
+  "Ror1",
+  "Tenm4",
+  "Sema6a",
+  "Kirrel3",
+  "Col19a1",
+  "Peg3",
+  "Fgfr4",
+  "Tanc2",
+  "Cfh",
+  "Calcr",
+  "Pde1c",
+  "Meg3",
+  "Sytl2",
+  "Gm26834",
+  "Hmcn2",
+  "Megf10",
+  "Ncam1",
+  "Clmn",
+  "Hs6st2",
+  "Sulf1",
+  "Tshz3",
+  "Pde10a",
+  "Cdk14",
+  "Slc7a11",
+  "Commd10",
+  "Nkain2"
+)
+markers_EC <- c(
+  "Flt1",
+  "Mecom",
+  "St6galnac3",
+  "Cyyr1",
+  "Adgrl4",
+  "Ablim1",
+  "Adgrf5",
+  "Dach1",
+  "Ablim3",
+  "Ptprb",
+  "Plcb4",
+  "Fli1",
+  "Prkch",
+  "Shank3",
+  "Itpkb",
+  "Bmp6",
+  "Pecam1",
+  "Egfl7",
+  "Pkp4",
+  "Magi1",
+  "Mcf2l",
+  "Pdgfd",
+  "Plcb1",
+  "Rasgrf2",
+  "Myo10",
+  "Mcc",
+  "Kitl",
+  "Sema6a",
+  "Lnx1",
+  "Ptprm"
+)
+
+markers_Macrophages <- c(
+  "F13a1",
+  "Mctp1",
+  "Rbpj",
+  "Mrc1",
+  "Slc9a9",
+  "Pid1",
+  "Dab2",
+  "Ptprj",
+  "Stab1",
+  "Frmd4b",
+  "Cd163",
+  "Dock2",
+  "Plekhg5",
+  "Inpp5d",
+  "Runx1",
+  "Arhgap15",
+  "Tbxas1",
+  "Pip4k2a",
+  "Zswim6",
+  "Fyb",
+  "Aoah",
+  "Ptprc",
+  "Iqgap2",
+  "Adgre1",
+  "Myo5a",
+  "Dock8",
+  "Cfh",
+  "Myo1f",
+  "Gas7",
+  "Zeb2"
+)
+markers_Tcells <- c(
+  "Bank1",
+  "Dock2",
+  "Ptprc",
+  "Gm2682",
+  "Skap1",
+  "Aff3",
+  "Prkcb",
+  "Ikzf1",
+  "Ccnd3",
+  "Pax5",
+  "Grap2",
+  "Ralgps2",
+  "Dock10",
+  "Arhgap45",
+  "Gm15987",
+  "Syk",
+  "Nedd9",
+  "Ikzf3",
+  "Tmem163",
+  "Bcl11a",
+  "Scml4",
+  "Dock8",
+  "Elmo1",
+  "Arhgap15",
+  "Runx1",
+  "Ripor2",
+  "Themis",
+  "Itga4",
+  "Arhgef18",
+  "Bach2"
+)
+markers_FastIIB <- c(
+  "Myh4",
+  "Pfkfb3",
+  "Actn3",
+  "Mylk4",
+  "Pde4d",
+  "Mybpc2",
+  "Pvalb",
+  "Eya4",
+  "Ampd1",
+  "Phka1",
+  "Pgm1",
+  "Trim63",
+  "Sorbs2",
+  "Clip1",
+  "Rbfox1",
+  "Prkag3",
+  "Mylk2",
+  "Xpr1",
+  "Ighm",
+  "Fbxo32",
+  "Ttll7",
+  "Tpm1",
+  "Ube2d1",
+  "Tmem233",
+  "Casq1",
+  "Gm26740",
+  "Sox6",
+  "Phkg1",
+  "Agl",
+  "Trdn"
+)
+markers_FastIIX <- c(
+  "Myh1",
+  "Agbl1",
+  "Mybpc1",
+  "Esrrg",
+  "Ank2",
+  "Actn2",
+  "Cd36",
+  "Ckmt2",
+  "2310016D03Rik",
+  "Vegfa",
+  "Ptpn3",
+  "Fhl1",
+  "Atp1b1",
+  "Padi2",
+  "Adk",
+  "4831440D22Rik",
+  "Kcnn2",
+  "Ppara",
+  "Wnt5b",
+  "Filip1l",
+  "Ppargc1a",
+  "Tmem65",
+  "2310067P03Rik",
+  "Rmdn1",
+  "Fgf1",
+  "Sorbs1",
+  "Coq8a",
+  "Ppargc1b",
+  "Qk",
+  "Acss2"
+)
+
+markers_FastIIA <- c(
+  "Myh2",
+  "Ppara",
+  "Agbl1",
+  "Esrrg",
+  "Ankrd2",
+  "Myom3",
+  "Actn2",
+  "Ckmt2",
+  "Myoz2",
+  "Lpl",
+  "Lmod2",
+  "Mybpc1",
+  "Grm1",
+  "Sox2ot",
+  "Coro6",
+  "Idh2",
+  "Qk",
+  "Atp1b1",
+  "Lmcd1",
+  "Ank2",
+  "Sorbs1",
+  "Ptpn3",
+  "Fhl1",
+  "Gm41757",
+  "Arpp21",
+  "Gm28653",
+  "Acss2",
+  "Fgf1",
+  "Ldhb",
+  "Adk"
+)
+
+markers_slowI <- c(
+  "Myh7",
+  "Ankrd2",
+  "Gm28653",
+  "Myom3",
+  "Gm31251",
+  "Myl2",
+  "Csrp3",
+  "Myoz2",
+  "Myh7b",
+  "Tnnt1",
+  "Myh10",
+  "Tnnc1",
+  "Mhrt",
+  "Fhl1",
+  "Lmod2",
+  "Atp2a2",
+  "Myh2",
+  "Lmcd1",
+  "Cryab",
+  "Actn2",
+  "Mybpc1",
+  "Atf3",
+  "Tpm3",
+  "Flnc",
+  "Dkk2",
+  "Enah",
+  "Ankrd1",
+  "Klhl40",
+  "Gm13601",
+  "Xirp2"
+)
+
+markers_myoblast <- c(
+  "Myh3",
+  "Tnnt2",
+  "Myh8",
+  "Gm28653",
+  "Gm11149",
+  "Acta2",
+  "Cers6",
+  "Ncam1",
+  "Megf10",
+  "Sytl2",
+  "Slc9a9",
+  "Col19a1",
+  "Dclk1",
+  "Sntb1",
+  "Ccdc141",
+  "Ryr3",
+  "Map1b",
+  "Runx1",
+  "Pgm5",
+  "Arpp21",
+  "Dlg2",
+  "Enah",
+  "Erf",
+  "Sorcs2",
+  "Macf1",
+  "Nav2",
+  "Hip1",
+  "Frmd4b",
+  "Fggy",
+  "Col23a1"
+)
+```
+
+# Load genes of interest 
+
+```{r markers from Atlas}
+markers <- c(
+  "Ano4", "Prkar1a", "Ufsp1", "Col13a1", # NMJ
+  "Tnxb", "Plxdc2", "Egfr", "Gsn", # FAP
+  "Abi3bp", "Ptprd", "Nlan1", # Tendon
+  "Col22a1", "Adamts20", "Anqpt1", "App", # MTJ
+  "Trpc3", "Cacna1c", "Opcml", "Slc35f1", # Pericyte
+  "Hs6st3", "Chodl", "Pax7", "Tenm4", # Satellite cell
+  "Flt1", "Mecom", "Cyvr1", "Dach1", "Pecam1", # EC
+  "F13a1", "Mctp1", "Rbpi", "Slc9a9", # Macrophages
+  "Actn3", "Sorbs2", "Prkaq3", "Xpr1", # FastIIB
+  "Myh1", "Kcnn2", "Acss2", "Fhl1" # FastIIX
+)
+```
+
+
+```{r }
+VlnPlot(cluster_seurat,
+  features = markers, assay = "RNA",
+  group.by = "seurat_clusters",
+  stack = TRUE, flip = TRUE
+)
+ggsave(file.path(out_path, "Vlnplot_markers.png"))
+# FeaturePlot(cluster_seurat, features = "Negr1")
+# ggsave(file.path(out_path, "Negr1_marker.png"))
+
+# #"all markers2": 12:  neuromuscular junction (NMJ) markers2
+# all markers3: 7: FAP
+# most of the markers 4: 13: Tendon
+# most of the markers5: 9: Myotendinous junction MTJ
+# all markers6: 10: Pericyte
+# all markers 7: 11: Skeleton muscle Satellite cell
+# all markers 8: 8: EC
+# all markers 9: 14: Macrophages
+# all markers 12: 1:2:5 Fast IIX
+# all markers 11: 0:3:4:6 Fast IIB
+```
+
+# Save the merged clusters (more accurate cell-types) 
+# Save the R_Obj with re-assigned cell-types to clusters
+
+```{r TcellsOnly_genetic_markers_rename}
+new.cluster.ids <- c(
+  "Fast IIB", "Fast IIX", "Fast IIX", "Fast IIB", "Fast IIB", "Fast IIX", "Fast IIB",
+  "FAPs", "EC", "MTJ", "Pericyte", "Skeleton MuSc", "NMJ",
+  "Tendon", "Macrophages"
+)
+# Fibro-adipogenic progenitors (FAPs)
+# Endothelial Cells (EC)
+# Myotendinous junction (MTJ)
+# Skeleton muscle Satellite cells (Skeleton MuSc)
+# neuromuscular junction (NMJ)
+names(new.cluster.ids) <- levels(cluster_seurat)
+cluster_seurat <- RenameIdents(cluster_seurat, new.cluster.ids)
+DimPlot(cluster_seurat, reduction = "umap", label = TRUE, pt.size = 0.5) + NoLegend()
+# save the final umap with merged clusters (relevant number according to cell-types matched after cluster-marker analysis)
+# ggsave(file.path(out_path, "clusters_annot.png"))
+```
+```{r }
+# saveRDS(cluster_seurat, "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/Agingcluster_seurat.rds")
+cluster_seurat <- readRDS("/ix/djishnu/Zarifeh/ML_MM/Aditi/result/Aging/Agingcluster_seurat.rds")
+```
+
+``` {r Assigning cell type identity to clusters }
+DoHeatmap(cluster_seurat, features = markers) + NoLegend()
+# ggsave("/ix/djishnu/Zarifeh/ML_MM/Aditi/result/Clustering2/Aging/heatmap_markers.png", device = "png", width = 30)
+```
+
+
+```{r }
+DotPlot(
+  object = cluster_seurat,
+  features = unique(markers),
+  cluster.idents = TRUE,
+  scale.by = "radius",
+  cols = c("lightgrey", "darkgreen"),
+) + RotatedAxis()
+
+ggsave("/ix/djishnu/Zarifeh/ML_MM/Aditi/result/Clustering2/Aging/markers_dot.png", device = "png", width = 15)
+```
+
+# Prepare sample (4 mice) specific cell_count per cluster tables
+
+```{r }
+cluster_counts <- table(Idents(cluster_seurat))
+
+print("Number of cells in each cluster:")
+print(cluster_counts)
+
+## settings
+sample_names <- c("F7_KO", "F15_WT", "M4_KO", "M11_WT")
+
+F7_KO_cells <- cluster_seurat@meta.data[["cells"]][1:10169]
+F15_WT_cells <- cluster_seurat@meta.data[["cells"]][10170:19875]
+M4_KO_cells <- cluster_seurat@meta.data[["cells"]][19876:31893]
+M11_WT_cells <- cluster_seurat@meta.data[["cells"]][31894:40106]
+
+# Var1	Freq
+# F15_WT	9706
+# F7_KO	10169
+# M11_WT	8213
+# M4_KO	12018
+
+F7_KO_cluster <- cluster_seurat@meta.data[["RNA_snn_res.0.6"]][1:10169]
+F15_WT_cluster <- cluster_seurat@meta.data[["RNA_snn_res.0.6"]][10170:19875]
+M4_KO_cluster <- cluster_seurat@meta.data[["RNA_snn_res.0.6"]][19876:31893]
+M11_WT_cluster <- cluster_seurat@meta.data[["RNA_snn_res.0.6"]][31894:40106]
+
+
+
+F7_KO_df <- data.frame(Cell = F7_KO_cells, Cluster = F7_KO_cluster)
+head(F7_KO_df)
+tail(F7_KO_df)
+
+cluster_counts_F7_KO_df <- table(F7_KO_df$Cluster)
+cluster_counts_F7_KO_df <- as.data.frame(cluster_counts_F7_KO_df)
+names(cluster_counts_F7_KO_df) <- c("Cluster", "Cell_Count")
+write.csv(cluster_counts_F7_KO_df, "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/F7_KO_Cells_Clusters.csv")
+
+F15_WT_df <- data.frame(Cell = F15_WT_cells, Cluster = F15_WT_cluster)
+head(F15_WT_df)
+tail(F15_WT_df)
+cluster_counts_F15_WT_df <- table(F15_WT_df$Cluster)
+cluster_counts_F15_WT_df <- as.data.frame(cluster_counts_F15_WT_df)
+names(cluster_counts_F15_WT_df) <- c("Cluster", "Cell_Count")
+cluster_counts_F15_WT_df["ID"] <- F7_KO_Cells_Clusters$ID
+write.csv(cluster_counts_F15_WT_df, "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/F15_WT_Cells_Clusters.csv")
+
+
+M4_KO_df <- data.frame(Cell = M4_KO_cells, Cluster = M4_KO_cluster)
+head(M4_KO_df)
+tail(M4_KO_df)
+cluster_counts_M4_KO_df <- table(M4_KO_df$Cluster)
+cluster_counts_M4_KO_df <- as.data.frame(cluster_counts_M4_KO_df)
+names(cluster_counts_M4_KO_df) <- c("Cluster", "Cell_Count")
+cluster_counts_M4_KO_df["ID"] <- F7_KO_Cells_Clusters$ID
+write.csv(cluster_counts_M4_KO_df, "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/M4_KO_Cells_Clusters.csv")
+
+
+M11_WT_df <- data.frame(Cell = M11_WT_cells, Cluster = M11_WT_cluster)
+head(M11_WT_df)
+tail(M11_WT_df)
+cluster_counts_M11_WT_df <- table(M11_WT_df$Cluster)
+cluster_counts_M11_WT_df <- as.data.frame(cluster_counts_M11_WT_df)
+names(cluster_counts_M11_WT_df) <- c("Cluster", "Cell_Count")
+cluster_counts_M11_WT_df["ID"] <- F7_KO_Cells_Clusters$ID
+write.csv(cluster_counts_M11_WT_df, "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/M11_WT_Cells_Clusters.csv")
+```
+
+# Prepare perturbed (KO) and unperturbed (WT) gene_by_cell tables
+
+```{r }
+gene_names <- cluster_seurat@assays[["RNA"]]@meta.data[["var.features"]]
+cell_names <- cluster_seurat@meta.data[["cells"]]
+
+counts <- cluster_seurat@assays[["RNA"]]@layers[["counts"]]
+dim(counts)
+gene_cell_matrix <- as.matrix(counts)
+
+rownames(gene_cell_matrix) <- gene_names
+colnames(gene_cell_matrix) <- cell_names
+
+dim(gene_cell_matrix) # 20513 40106
+# THERE ARE NA values in rows, we remove them
+gene_cell_matrix <- gene_cell_matrix[!is.na(rownames(gene_cell_matrix)), ]
+
+dim(gene_cell_matrix) # 2000 40106
+gene_cell_matrix[1:5, 1:4]
+
+any_zero_row <- any(rowSums(gene_cell_matrix == 0) == ncol(gene_cell_matrix)) # FALSE
+
+file_path <- "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/gene_cell_matrix.csv"
+write.csv(gene_cell_matrix, file = file_path)
+
+### making the KO matrix
+F7_KO_matrix <- gene_cell_matrix[, 1:10169]
+dim(F7_KO_matrix) # 2000 10169
+M4_KO_matrix <- gene_cell_matrix[, 19876:31893]
+dim(M4_KO_matrix) # 2000 12018
+
+KO_matrix <- cbind(F7_KO_matrix, M4_KO_matrix)
+dim(KO_matrix) # 2000 22187
+file_path <- "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/KO_matrix.csv"
+write.csv(KO_matrix, file = file_path)
+
+### making the WT matrix
+F15_WT_matrix <- gene_cell_matrix[, 10170:19875]
+dim(F15_WT_matrix) # 2000 9706
+
+M11_WT_matrix <- gene_cell_matrix[, 31894:40106]
+dim(M11_WT_matrix) # 2000 8213
+
+WT_matrix <- cbind(F15_WT_matrix, M11_WT_matrix)
+dim(WT_matrix) # 2000 17919
+file_path <- "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/WT_matrix.csv"
+write.csv(WT_matrix, file = file_path)
+```
+
+# Identify DEGs per cell-type specific cluster; save as .csv
+
+```{r }
+library(DESeq2)
+WT_matrix <- read.csv("/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/WT_matrix.csv", row.names = 1)
+KO_matrix <- read.csv("/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/KO_matrix.csv", row.names = 1)
+WT_matrix[1:3, 1:4]
+
+WT_counts <- as.matrix(WT_matrix[1:400, 1:1000])
+KO_counts <- as.matrix(KO_matrix[1:400, 1:900])
+
+condition <- c(rep("WT", ncol(WT_counts)), rep("KO", ncol(KO_counts)))
+all_counts <- cbind(WT_counts, KO_counts)
+WT_counts <- WT_counts + 1
+KO_counts <- KO_counts + 1
+
+dds <- DESeqDataSetFromMatrix(
+  countData = cbind(WT_counts, KO_counts),
+  colData = data.frame(condition),
+  design = ~condition
+)
+
+dds <- DESeq(dds)
+
+res <- results(dds)
+
+alpha <- 0.05
+sig_genes <- subset(res, padj < alpha)
+
+head(sig_genes)
+
+plotMA(res)
+```
+
+```{r adding to matadata}
+library(EnhancedVolcano)
+
+levels(cluster_seurat)
+seurat_obj <- cluster_seurat
+seurat_obj@meta.data["cell_id"] <- seurat_obj@active.ident
+matrix <- seurat_obj@meta.data
+matrix$orig.ident <- paste(matrix$orig.ident, matrix$cell_id, sep = "_")
+head(matrix)
+
+Idents(seurat_obj)
+Idents(seurat_obj) <- matrix$orig.ident
+```
+
+```{r FastIIB}
+FastIIB.de.markers <- FindMarkers(seurat_obj, ident.1 = c("F15_WT_Fast IIB", "M11_WT_Fast IIB"), ident.2 = c("F7_KO_Fast IIB", "M4_KO_Fast IIB"))
+head(FastIIB.de.markers)
+write.csv(FastIIB.de.markers, "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/DEGs/FastIIB.csv")
+
+df <- FastIIB.de.markers
+
+EnhancedVolcano(df,
+  rownames(df),
+  x = "avg_log2FC",
+  y = "p_val_adj",
+  pCutoff = significance_threshold,
+  FCcutoff = 1,
+  pointSize = 2,
+  drawConnectors = TRUE,
+  title = "Fast IIB in WT vs. KO",
+)
+```
+
+
+```{r FastIIX}
+FastIIX.de.markers <- FindMarkers(seurat_obj, ident.1 = c("F15_WT_Fast IIX", "M11_WT_Fast IIX"), ident.2 = c("F7_KO_Fast IIX", "M4_KO_Fast IIX"))
+head(FastIIX.de.markers)
+write.csv(FastIIX.de.markers, "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/DEGs/FastIIX.csv")
+
+df <- FastIIX.de.markers
+
+EnhancedVolcano(df,
+  rownames(df),
+  x = "avg_log2FC",
+  y = "p_val_adj",
+  pCutoff = significance_threshold,
+  FCcutoff = 1,
+  pointSize = 2,
+  drawConnectors = TRUE,
+  title = "Fast IIX in WT vs. KO",
+)
+```
+
+```{r FAPs}
+FAPs.de.markers <- FindMarkers(seurat_obj, ident.1 = c("F15_WT_FAPs", "M11_WT_FAPs"), ident.2 = c("F7_KO_FAPs", "M4_KO_FAPs"))
+head(FAPs.de.markers)
+write.csv(FAPs.de.markers, "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/DEGs/FAPs.csv")
+
+df <- FAPs.de.markers
+
+EnhancedVolcano(df,
+  rownames(df),
+  x = "avg_log2FC",
+  y = "p_val_adj",
+  pCutoff = significance_threshold,
+  FCcutoff = 1,
+  pointSize = 2,
+  drawConnectors = TRUE,
+  title = "FAPs in WT vs. KO",
+)
+```
+
+```{r EC}
+EC.de.markers <- FindMarkers(seurat_obj, ident.1 = c("F15_WT_EC", "M11_WT_EC"), ident.2 = c("F7_KO_EC", "M4_KO_EC"))
+head(EC.de.markers)
+write.csv(EC.de.markers, "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/DEGs/EC.csv")
+df <- EC.de.markers
+
+EnhancedVolcano(df,
+  rownames(df),
+  x = "avg_log2FC",
+  y = "p_val_adj",
+  pCutoff = significance_threshold,
+  FCcutoff = 1,
+  pointSize = 2,
+  drawConnectors = TRUE,
+  title = "EC in WT vs. KO",
+)
+```
+
+```{r MTJ}
+MTJ.de.markers <- FindMarkers(seurat_obj, ident.1 = c("F15_WT_MTJ", "M11_WT_MTJ"), ident.2 = c("F7_KO_MTJ", "M4_KO_MTJ"))
+head(MTJ.de.markers)
+write.csv(MTJ.de.markers, "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/DEGs/MTJ.csv")
+
+df <- MTJ.de.markers
+
+EnhancedVolcano(df,
+  rownames(df),
+  x = "avg_log2FC",
+  y = "p_val_adj",
+  pCutoff = significance_threshold,
+  FCcutoff = 1,
+  pointSize = 2,
+  drawConnectors = TRUE,
+  title = "MTJ in WT vs. KO",
+)
+```
+
+```{r Pericyte}
+Pericyte.de.markers <- FindMarkers(seurat_obj, ident.1 = c("F15_WT_Pericyte", "M11_WT_Pericyte"), ident.2 = c("F7_KO_Pericyte", "M4_KO_Pericyte"))
+head(Pericyte.de.markers)
+write.csv(Pericyte.de.markers, "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/DEGs/Pericyte.csv")
+
+df <- Pericyte.de.markers
+
+EnhancedVolcano(df,
+  rownames(df),
+  x = "avg_log2FC",
+  y = "p_val_adj",
+  pCutoff = significance_threshold,
+  FCcutoff = 1,
+  pointSize = 2,
+  drawConnectors = TRUE,
+  title = "Pericyte in WT vs. KO",
+)
+```
+
+```{r Skeleton MuSc}
+Skeleton_MuSc.de.markers <- FindMarkers(seurat_obj, ident.1 = c("F15_WT_Skeleton MuSc", "M11_WT_Skeleton MuSc"), ident.2 = c("F7_KO_Skeleton MuSc", "M4_KO_Skeleton MuSc"))
+head(Skeleton_MuSc.de.markers)
+write.csv(Skeleton_MuSc.de.markers, "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/DEGs/Skeleton_MuSc.csv")
+
+df <- Skeleton_MuSc.de.markers
+
+EnhancedVolcano(df,
+  rownames(df),
+  x = "avg_log2FC",
+  y = "p_val_adj",
+  pCutoff = significance_threshold,
+  FCcutoff = 1,
+  pointSize = 2,
+  drawConnectors = TRUE,
+  title = "Skeleton MuSc in WT vs. KO",
+)
+```
+
+```{r NMJ}
+NMJ.de.markers <- FindMarkers(seurat_obj, ident.1 = c("F15_WT_NMJ", "M11_WT_NMJ"), ident.2 = c("F7_KO_NMJ", "M4_KO_NMJ"))
+head(NMJ.de.markers)
+write.csv(NMJ.de.markers, "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/DEGs/NMJ.csv")
+df <- NMJ.de.markers
+
+EnhancedVolcano(df,
+  rownames(df),
+  x = "avg_log2FC",
+  y = "p_val_adj",
+  pCutoff = significance_threshold,
+  FCcutoff = 1,
+  pointSize = 2,
+  drawConnectors = TRUE,
+  title = "NMJ in WT vs. KO",
+)
+```
+
+```{r Tendon}
+Tendon.de.markers <- FindMarkers(seurat_obj, ident.1 = c("F15_WT_Tendon", "M11_WT_Tendon"), ident.2 = c("F7_KO_Tendon", "M4_KO_Tendon"))
+head(Tendon.de.markers)
+write.csv(Tendon.de.markers, "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/DEGs/Tendon.csv")
+df <- Tendon.de.markers
+
+EnhancedVolcano(df,
+  rownames(df),
+  x = "avg_log2FC",
+  y = "p_val_adj",
+  pCutoff = significance_threshold,
+  FCcutoff = 1,
+  pointSize = 2,
+  drawConnectors = TRUE,
+  title = "Tendon in WT vs. KO",
+)
+```
+
+```{r Macrophages}
+Macrophages.de.markers <- FindMarkers(seurat_obj, ident.1 = c("F15_WT_Macrophages", "M11_WT_Macrophages"), ident.2 = c("F7_KO_Macrophages", "M4_KO_Macrophages"))
+head(Macrophages.de.markers)
+write.csv(Macrophages.de.markers, "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/DEGs/Macrophages.csv")
+df <- Macrophages.de.markers
+
+EnhancedVolcano(df,
+  rownames(df),
+  x = "avg_log2FC",
+  y = "p_val_adj",
+  pCutoff = significance_threshold,
+  FCcutoff = 1,
+  pointSize = 2,
+  drawConnectors = TRUE,
+  title = "Macrophages in WT vs. KO",
+)
+```
