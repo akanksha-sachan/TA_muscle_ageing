@@ -33,7 +33,7 @@ proj_path <- "/ix/djishnu/Zarifeh/ML_MM"
 data_path <- file.path(proj_path, "Aditi/")
 sc_sample_paths <- paste0(data_path, rep(c("aging_F7", "aging_F15", "aging_M4", "aging_M11")))
 count_paths <- file.path(sc_sample_paths, "outs/filtered_feature_bc_matrix")
-out_path <- "/ix/djishnu/Akanksha/ERCC1_snRNA_analysis/ERCC1_exp/Seurat_analysis"
+out_path <- "/ix/djishnu/Akanksha/ERCC1_snRNA_analysis/ERCC1_exp/Seurat_analysis_outputs"
 sample_names <- c("F7_KO", "F15_WT", "M4_KO", "M11_WT")
 # mtPattern: a regex pattern to match against features to look for mitochondrial DNA; may need to adjust for
 # sample species---"^MT-" works for human samples and "^mt-" for mice
