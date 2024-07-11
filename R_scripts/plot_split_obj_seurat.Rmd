@@ -1,0 +1,543 @@
+---
+# main script to identify the FastIIX, FastIIB, MuSC, FAPs major cell-types
+
+title: "scRNA analysis"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true # table of content true
+    toc_depth: 1
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+    number_sections: false  ## if you want number sections at each table header
+    theme: united  # many options for theme, this one is my favorite.
+    highlight: tango  # specifies the syntax highlighting style
+---
+
+# Load cell-ranger feature_by_cell matrices 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+library(stringr)
+library(dplyr)
+library(Seurat)
+library(patchwork)
+library(ggplot2) # version should be >=3.5.0 from CRAN
+library(openxlsx)
+library(harmony)
+library(SingleR)
+
+# Directories
+proj_path <- "/ix/djishnu/Zarifeh/ML_MM"
+data_path <- file.path(proj_path, "Aditi/")
+sc_sample_paths <- paste0(data_path, rep(c("aging_F7", "aging_F15", "aging_M4", "aging_M11")))
+count_paths <- file.path(sc_sample_paths, "outs/filtered_feature_bc_matrix") # input to seurat from cell-ranger
+out_path <- "/ix/djishnu/Akanksha/ERCC1_snRNA_analysis/ERCC1_exp/Seurat_analysis"
+sample_names <- c("F7_KO", "F15_WT", "M4_KO", "M11_WT")
+```
+
+############################################## CELL EMBEDDINGS #########################################################
+
+# Load the QC filtered object with cell embeddings 
+
+``` {r Reading seurat object}
+# reads the QC pre-processed seurat obj, which contains one layer for all sample cells (merged), and 10 cell-type labels
+cluster_seurat <- readRDS("/ix/djishnu/Zarifeh/ML_MM/Aditi/result/Aging/Agingcluster_seurat.rds")
+```
+
+# Load genes/biomarkers of interest 
+
+```{r markers from Atlas}
+markers <- c(
+  "Ano4", "Prkar1a", "Ufsp1", "Col13a1", # NMJ
+  "Tnxb", "Plxdc2", "Egfr", "Gsn", # FAP
+  "Abi3bp", "Ptprd", "Nlan1", # Tendon
+  "Col22a1", "Adamts20", "Anqpt1", "App", # MTJ
+  "Trpc3", "Cacna1c", "Opcml", "Slc35f1", # Pericyte
+  "Hs6st3", "Chodl", "Pax7", "Tenm4", # Satellite cell
+  "Flt1", "Mecom", "Cyvr1", "Dach1", "Pecam1", # EC
+  "F13a1", "Mctp1", "Rbpi", "Slc9a9", # Macrophages
+  "Actn3", "Sorbs2", "Prkaq3", "Xpr1", # FastIIB
+  "Myh1", "Kcnn2", "Acss2", "Fhl1" # FastIIX
+)
+```
+
+# Plot marker genes for all identified clusters
+
+```{r violin plot cluster_biomarkers}
+VlnPlot(cluster_seurat,
+  features = markers, assay = "RNA",
+  group.by = "seurat_clusters",
+  stack = TRUE, flip = TRUE
+)
+# ggsave(file.path(out_path, "/plots/Vlnplot_markers.png"))
+```
+
+# Augment meta_data for this object
+
+```{r meta data inspection}
+metadata <- cluster_seurat@meta.data
+sample_names <- c("F7_KO", "F15_WT", "M4_KO", "M11_WT")
+# remove some redundant columns
+metadata <- metadata %>% select(-sample, -cells)
+# assign the condition based on if F7,M4 then KO or else WT
+metadata$condition <- ifelse(metadata$orig.ident %in% c("F7_KO", "M4_KO"), "KO", "WT")
+cluster_seurat@meta.data <- metadata
+print(head(metadata))
+```
+
+# UMAPs : cluster labels based on major cell-types // samples based on conditions and batches
+
+```{r plot all_sample umaps with specific cluster labels}
+# check the cluster labels and number of cells per cluster
+current.cluster.ids <- levels((Idents(cluster_seurat)))
+print(current.cluster.ids)
+cell_counts_per_cluster <- table(Idents(cluster_seurat))
+print(cell_counts_per_cluster)
+
+# print dimensions of umap reductions (cell embeddings and gene loadings)
+umap_embeddings <- cluster_seurat@reductions$umap@cell.embeddings
+print(dim(umap_embeddings))
+
+# plotting umaps
+umap_cell_type <- DimPlot(cluster_seurat, reduction = "umap", label = TRUE, pt.size = 1)
+# ggsave(file.path(out_path, "/plots/all_cells_celltype_labels.png"), plot = umap_cell_type, width = 10.1, height = 10.1)
+umap_sample <- DimPlot(cluster_seurat, reduction = "umap", label = TRUE, group.by = "orig.ident", pt.size = 1)
+# ggsave(file.path(out_path, "/plots/all_cells_sample_labels.png"), plot = umap_sample, width = 10.1, height = 10.1)
+umap_condition <- DimPlot(cluster_seurat, reduction = "umap", label = TRUE, group.by = "condition", pt.size = 1)
+# ggsave(file.path(out_path, "/plots/all_cells_condition_labels.png"), plot = umap_condition, width = 10.1, height = 10.1)
+```
+
+```{r split the whole seurat object into condition specific objects}
+# split the object based on condition metadata
+condition_obj_list <- SplitObject(cluster_seurat, split.by = "condition")
+condition_obj_list$KO
+print(head(condition_obj_list$KO@meta.data))
+condition_obj_list$WT
+print(head(condition_obj_list$WT@meta.data))
+```
+
+```{r plot conditon specific umaps}
+# plot umaps based on cell-type labels
+umap_KO <- DimPlot(condition_obj_list$KO, reduction = "umap", label = TRUE, pt.size = 1)
+# ggsave(file.path(out_path, "/plots/KO_celltype_labels.png"), plot = umap_KO, width = 10.1, height = 10.1)
+umap_WT <- DimPlot(condition_obj_list$WT, reduction = "umap", label = TRUE, pt.size = 1)
+# ggsave(file.path(out_path, "/plots/WT_celltype_labels.png"), plot = umap_WT, width = 10.1, height = 10.1)
+```
+
+```{r save rds}
+saveRDS(condition_obj_list$KO, file = paste0(out_path, "/objects/KO_major_celltype_obj.rds"))
+saveRDS(condition_obj_list$WT, file = paste0(out_path, "/objects/WT_major_celltype_obj.rds"))
+```
+
+# Batch effect between M/F samples per condition
+
+```{r plot batch effect in condition umaps}
+# plot umaps based on cell-type labels
+umap_KO_sample <- DimPlot(condition_obj_list$KO, reduction = "umap", label = TRUE, group.by = "orig.ident", pt.size = 1)
+# ggsave(file.path(out_path, "/plots/KO_sample_labels.png"), plot = umap_KO_sample, width = 10.1, height = 10.1)
+umap_WT_sample <- DimPlot(condition_obj_list$WT, reduction = "umap", label = TRUE, group.by = "orig.ident", pt.size = 1)
+# ggsave(file.path(out_path, "/plots/WT_sample_labels.png"), plot = umap_WT_sample, width = 10.1, height = 10.1)
+```
+
+```{r run harmony integration/batch-effect reduction}
+# old reductions
+# print(head(condition_obj_list$KO@reductions$harmony@cell.embeddings))
+# print(head(condition_obj_list$WT@reductions$harmony@cell.embeddings))
+
+# run harmony to integrate M/F samples per seurat object (for both WT and KO) and add to its reductions slot
+KO_batch_integrated_obj <- RunHarmony(condition_obj_list$KO, group.by.vars = "orig.ident") # orig.ident stores the sample name/batch
+WT_batch_integrated_obj <- RunHarmony(condition_obj_list$WT, group.by.vars = "orig.ident")
+# run umap post this for better viz
+
+# new reductions
+print(head(KO_batch_integrated_obj@reductions$harmony@cell.embeddings))
+print(head(WT_batch_integrated_obj@reductions$harmony@cell.embeddings))
+```
+
+```{r plot harmony integration/batch-effect reduction}
+# run UMAP to transform the coordinates of harmony for plotting
+nDims <- 18
+KO_batch_integrated_obj <- RunUMAP(KO_batch_integrated_obj, dims = 1:nDims)
+WT_batch_integrated_obj <- RunUMAP(WT_batch_integrated_obj, dims = 1:nDims)
+
+# plot umaps based on cell-type labels
+KO_harmony <- DimPlot(KO_batch_integrated_obj, reduction = "umap", label = TRUE, group.by = "orig.ident", pt.size = 1)
+ggsave(file.path(out_path, "/plots/KO_harmony.png"), plot = KO_harmony, width = 10.1, height = 10.1)
+WT_harmony <- DimPlot(WT_batch_integrated_obj, reduction = "umap", label = TRUE, group.by = "orig.ident", pt.size = 1)
+ggsave(file.path(out_path, "/plots/WT_harmony.png"), plot = WT_harmony, width = 10.1, height = 10.1)
+```
+
+# check cell count per marker
+
+```{r }
+DotPlot(
+  object = cluster_seurat,
+  features = unique(markers),
+  cluster.idents = TRUE,
+  scale.by = "radius",
+  cols = c("lightgrey", "darkgreen"),
+) + RotatedAxis()
+
+# ggsave(file.path(out_path, "/plots/celltype_count_per_marker.png"), device = "png", width = 15)
+```
+
+# Prepare sample (4 mice) specific cell_count per cluster tables
+
+```{r }
+cluster_counts <- table(Idents(cluster_seurat))
+
+print("Number of cells in each cluster:")
+print(cluster_counts)
+
+## settings
+sample_names <- c("F7_KO", "F15_WT", "M4_KO", "M11_WT")
+
+F7_KO_cells <- cluster_seurat@meta.data[["cells"]][1:10169]
+F15_WT_cells <- cluster_seurat@meta.data[["cells"]][10170:19875]
+M4_KO_cells <- cluster_seurat@meta.data[["cells"]][19876:31893]
+M11_WT_cells <- cluster_seurat@meta.data[["cells"]][31894:40106]
+
+# Var1	Freq
+# F15_WT	9706
+# F7_KO	10169
+# M11_WT	8213
+# M4_KO	12018
+
+F7_KO_cluster <- cluster_seurat@meta.data[["RNA_snn_res.0.6"]][1:10169]
+F15_WT_cluster <- cluster_seurat@meta.data[["RNA_snn_res.0.6"]][10170:19875]
+M4_KO_cluster <- cluster_seurat@meta.data[["RNA_snn_res.0.6"]][19876:31893]
+M11_WT_cluster <- cluster_seurat@meta.data[["RNA_snn_res.0.6"]][31894:40106]
+
+
+
+F7_KO_df <- data.frame(Cell = F7_KO_cells, Cluster = F7_KO_cluster)
+head(F7_KO_df)
+tail(F7_KO_df)
+
+cluster_counts_F7_KO_df <- table(F7_KO_df$Cluster)
+cluster_counts_F7_KO_df <- as.data.frame(cluster_counts_F7_KO_df)
+names(cluster_counts_F7_KO_df) <- c("Cluster", "Cell_Count")
+write.csv(cluster_counts_F7_KO_df, "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/F7_KO_Cells_Clusters.csv")
+
+F15_WT_df <- data.frame(Cell = F15_WT_cells, Cluster = F15_WT_cluster)
+head(F15_WT_df)
+tail(F15_WT_df)
+cluster_counts_F15_WT_df <- table(F15_WT_df$Cluster)
+cluster_counts_F15_WT_df <- as.data.frame(cluster_counts_F15_WT_df)
+names(cluster_counts_F15_WT_df) <- c("Cluster", "Cell_Count")
+cluster_counts_F15_WT_df["ID"] <- F7_KO_Cells_Clusters$ID
+write.csv(cluster_counts_F15_WT_df, "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/F15_WT_Cells_Clusters.csv")
+
+
+M4_KO_df <- data.frame(Cell = M4_KO_cells, Cluster = M4_KO_cluster)
+head(M4_KO_df)
+tail(M4_KO_df)
+cluster_counts_M4_KO_df <- table(M4_KO_df$Cluster)
+cluster_counts_M4_KO_df <- as.data.frame(cluster_counts_M4_KO_df)
+names(cluster_counts_M4_KO_df) <- c("Cluster", "Cell_Count")
+cluster_counts_M4_KO_df["ID"] <- F7_KO_Cells_Clusters$ID
+write.csv(cluster_counts_M4_KO_df, "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/M4_KO_Cells_Clusters.csv")
+
+
+M11_WT_df <- data.frame(Cell = M11_WT_cells, Cluster = M11_WT_cluster)
+head(M11_WT_df)
+tail(M11_WT_df)
+cluster_counts_M11_WT_df <- table(M11_WT_df$Cluster)
+cluster_counts_M11_WT_df <- as.data.frame(cluster_counts_M11_WT_df)
+names(cluster_counts_M11_WT_df) <- c("Cluster", "Cell_Count")
+cluster_counts_M11_WT_df["ID"] <- F7_KO_Cells_Clusters$ID
+write.csv(cluster_counts_M11_WT_df, "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/M11_WT_Cells_Clusters.csv")
+```
+
+################### Prepare perturbed (KO) and unperturbed (WT) tables and umaps #########################################
+
+```{r }
+gene_names <- cluster_seurat@assays[["RNA"]]@meta.data[["var.features"]]
+cell_names <- cluster_seurat@meta.data[["cells"]]
+
+counts <- cluster_seurat@assays[["RNA"]]@layers[["counts"]]
+dim(counts)
+gene_cell_matrix <- as.matrix(counts)
+
+rownames(gene_cell_matrix) <- gene_names
+colnames(gene_cell_matrix) <- cell_names
+
+dim(gene_cell_matrix) # 20513 40106
+# THERE ARE NA values in rows, we remove them
+gene_cell_matrix <- gene_cell_matrix[!is.na(rownames(gene_cell_matrix)), ]
+
+dim(gene_cell_matrix) # 2000 40106
+gene_cell_matrix[1:5, 1:4]
+
+any_zero_row <- any(rowSums(gene_cell_matrix == 0) == ncol(gene_cell_matrix)) # FALSE
+
+file_path <- "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/gene_cell_matrix.csv"
+write.csv(gene_cell_matrix, file = file_path)
+
+### making the KO matrix
+F7_KO_matrix <- gene_cell_matrix[, 1:10169]
+dim(F7_KO_matrix) # 2000 10169
+M4_KO_matrix <- gene_cell_matrix[, 19876:31893]
+dim(M4_KO_matrix) # 2000 12018
+
+KO_matrix <- cbind(F7_KO_matrix, M4_KO_matrix)
+dim(KO_matrix) # 2000 22187
+file_path <- "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/KO_matrix.csv"
+write.csv(KO_matrix, file = file_path)
+
+### making the WT matrix
+F15_WT_matrix <- gene_cell_matrix[, 10170:19875]
+dim(F15_WT_matrix) # 2000 9706
+
+M11_WT_matrix <- gene_cell_matrix[, 31894:40106]
+dim(M11_WT_matrix) # 2000 8213
+
+WT_matrix <- cbind(F15_WT_matrix, M11_WT_matrix)
+dim(WT_matrix) # 2000 17919
+file_path <- "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/WT_matrix.csv"
+write.csv(WT_matrix, file = file_path)
+```
+
+# Identify DEGs between WT and KO per cell-type specific cluster; save as .csv
+
+```{r }
+library(DESeq2)
+WT_matrix <- read.csv("/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/WT_matrix.csv", row.names = 1)
+KO_matrix <- read.csv("/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/KO_matrix.csv", row.names = 1)
+WT_matrix[1:3, 1:4]
+
+WT_counts <- as.matrix(WT_matrix[1:400, 1:1000])
+KO_counts <- as.matrix(KO_matrix[1:400, 1:900])
+
+condition <- c(rep("WT", ncol(WT_counts)), rep("KO", ncol(KO_counts)))
+all_counts <- cbind(WT_counts, KO_counts)
+WT_counts <- WT_counts + 1
+KO_counts <- KO_counts + 1
+
+dds <- DESeqDataSetFromMatrix(
+  countData = cbind(WT_counts, KO_counts),
+  colData = data.frame(condition),
+  design = ~condition
+)
+
+dds <- DESeq(dds)
+
+res <- results(dds)
+
+alpha <- 0.05
+sig_genes <- subset(res, padj < alpha)
+
+head(sig_genes)
+
+plotMA(res)
+```
+
+```{r adding to metadata}
+library(EnhancedVolcano)
+
+levels(cluster_seurat)
+seurat_obj <- cluster_seurat
+seurat_obj@meta.data["cell_id"] <- seurat_obj@active.ident
+matrix <- seurat_obj@meta.data
+matrix$orig.ident <- paste(matrix$orig.ident, matrix$cell_id, sep = "_")
+head(matrix)
+
+Idents(seurat_obj)
+Idents(seurat_obj) <- matrix$orig.ident
+```
+
+```{r FastIIB}
+FastIIB.de.markers <- FindMarkers(seurat_obj, ident.1 = c("F15_WT_Fast IIB", "M11_WT_Fast IIB"), ident.2 = c("F7_KO_Fast IIB", "M4_KO_Fast IIB"))
+head(FastIIB.de.markers)
+write.csv(FastIIB.de.markers, "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/DEGs/FastIIB.csv")
+
+df <- FastIIB.de.markers
+
+EnhancedVolcano(df,
+  rownames(df),
+  x = "avg_log2FC",
+  y = "p_val_adj",
+  pCutoff = significance_threshold,
+  FCcutoff = 1,
+  pointSize = 2,
+  drawConnectors = TRUE,
+  title = "Fast IIB in WT vs. KO",
+)
+```
+
+
+```{r FastIIX}
+FastIIX.de.markers <- FindMarkers(seurat_obj, ident.1 = c("F15_WT_Fast IIX", "M11_WT_Fast IIX"), ident.2 = c("F7_KO_Fast IIX", "M4_KO_Fast IIX"))
+head(FastIIX.de.markers)
+write.csv(FastIIX.de.markers, "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/DEGs/FastIIX.csv")
+
+df <- FastIIX.de.markers
+
+EnhancedVolcano(df,
+  rownames(df),
+  x = "avg_log2FC",
+  y = "p_val_adj",
+  pCutoff = significance_threshold,
+  FCcutoff = 1,
+  pointSize = 2,
+  drawConnectors = TRUE,
+  title = "Fast IIX in WT vs. KO",
+)
+```
+
+```{r FAPs}
+FAPs.de.markers <- FindMarkers(seurat_obj, ident.1 = c("F15_WT_FAPs", "M11_WT_FAPs"), ident.2 = c("F7_KO_FAPs", "M4_KO_FAPs"))
+head(FAPs.de.markers)
+write.csv(FAPs.de.markers, "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/DEGs/FAPs.csv")
+
+df <- FAPs.de.markers
+
+EnhancedVolcano(df,
+  rownames(df),
+  x = "avg_log2FC",
+  y = "p_val_adj",
+  pCutoff = significance_threshold,
+  FCcutoff = 1,
+  pointSize = 2,
+  drawConnectors = TRUE,
+  title = "FAPs in WT vs. KO",
+)
+```
+
+```{r EC}
+EC.de.markers <- FindMarkers(seurat_obj, ident.1 = c("F15_WT_EC", "M11_WT_EC"), ident.2 = c("F7_KO_EC", "M4_KO_EC"))
+head(EC.de.markers)
+write.csv(EC.de.markers, "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/DEGs/EC.csv")
+df <- EC.de.markers
+
+EnhancedVolcano(df,
+  rownames(df),
+  x = "avg_log2FC",
+  y = "p_val_adj",
+  pCutoff = significance_threshold,
+  FCcutoff = 1,
+  pointSize = 2,
+  drawConnectors = TRUE,
+  title = "EC in WT vs. KO",
+)
+```
+
+```{r MTJ}
+MTJ.de.markers <- FindMarkers(seurat_obj, ident.1 = c("F15_WT_MTJ", "M11_WT_MTJ"), ident.2 = c("F7_KO_MTJ", "M4_KO_MTJ"))
+head(MTJ.de.markers)
+write.csv(MTJ.de.markers, "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/DEGs/MTJ.csv")
+
+df <- MTJ.de.markers
+
+EnhancedVolcano(df,
+  rownames(df),
+  x = "avg_log2FC",
+  y = "p_val_adj",
+  pCutoff = significance_threshold,
+  FCcutoff = 1,
+  pointSize = 2,
+  drawConnectors = TRUE,
+  title = "MTJ in WT vs. KO",
+)
+```
+
+```{r Pericyte}
+Pericyte.de.markers <- FindMarkers(seurat_obj, ident.1 = c("F15_WT_Pericyte", "M11_WT_Pericyte"), ident.2 = c("F7_KO_Pericyte", "M4_KO_Pericyte"))
+head(Pericyte.de.markers)
+write.csv(Pericyte.de.markers, "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/DEGs/Pericyte.csv")
+
+df <- Pericyte.de.markers
+
+EnhancedVolcano(df,
+  rownames(df),
+  x = "avg_log2FC",
+  y = "p_val_adj",
+  pCutoff = significance_threshold,
+  FCcutoff = 1,
+  pointSize = 2,
+  drawConnectors = TRUE,
+  title = "Pericyte in WT vs. KO",
+)
+```
+
+```{r Skeleton MuSc}
+Skeleton_MuSc.de.markers <- FindMarkers(seurat_obj, ident.1 = c("F15_WT_Skeleton MuSc", "M11_WT_Skeleton MuSc"), ident.2 = c("F7_KO_Skeleton MuSc", "M4_KO_Skeleton MuSc"))
+head(Skeleton_MuSc.de.markers)
+write.csv(Skeleton_MuSc.de.markers, "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/DEGs/Skeleton_MuSc.csv")
+
+df <- Skeleton_MuSc.de.markers
+
+EnhancedVolcano(df,
+  rownames(df),
+  x = "avg_log2FC",
+  y = "p_val_adj",
+  pCutoff = significance_threshold,
+  FCcutoff = 1,
+  pointSize = 2,
+  drawConnectors = TRUE,
+  title = "Skeleton MuSc in WT vs. KO",
+)
+```
+
+```{r NMJ}
+NMJ.de.markers <- FindMarkers(seurat_obj, ident.1 = c("F15_WT_NMJ", "M11_WT_NMJ"), ident.2 = c("F7_KO_NMJ", "M4_KO_NMJ"))
+head(NMJ.de.markers)
+write.csv(NMJ.de.markers, "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/DEGs/NMJ.csv")
+df <- NMJ.de.markers
+
+EnhancedVolcano(df,
+  rownames(df),
+  x = "avg_log2FC",
+  y = "p_val_adj",
+  pCutoff = significance_threshold,
+  FCcutoff = 1,
+  pointSize = 2,
+  drawConnectors = TRUE,
+  title = "NMJ in WT vs. KO",
+)
+```
+
+```{r Tendon}
+Tendon.de.markers <- FindMarkers(seurat_obj, ident.1 = c("F15_WT_Tendon", "M11_WT_Tendon"), ident.2 = c("F7_KO_Tendon", "M4_KO_Tendon"))
+head(Tendon.de.markers)
+write.csv(Tendon.de.markers, "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/DEGs/Tendon.csv")
+df <- Tendon.de.markers
+
+EnhancedVolcano(df,
+  rownames(df),
+  x = "avg_log2FC",
+  y = "p_val_adj",
+  pCutoff = significance_threshold,
+  FCcutoff = 1,
+  pointSize = 2,
+  drawConnectors = TRUE,
+  title = "Tendon in WT vs. KO",
+)
+```
+
+```{r Macrophages}
+Macrophages.de.markers <- FindMarkers(seurat_obj, ident.1 = c("F15_WT_Macrophages", "M11_WT_Macrophages"), ident.2 = c("F7_KO_Macrophages", "M4_KO_Macrophages"))
+head(Macrophages.de.markers)
+write.csv(Macrophages.de.markers, "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/DEGs/Macrophages.csv")
+df <- Macrophages.de.markers
+
+EnhancedVolcano(df,
+  rownames(df),
+  x = "avg_log2FC",
+  y = "p_val_adj",
+  pCutoff = significance_threshold,
+  FCcutoff = 1,
+  pointSize = 2,
+  drawConnectors = TRUE,
+  title = "Macrophages in WT vs. KO",
+)
+```
+
+# Save seurat_obj with the cell_id metadata column added for the major cell-type labels
+
+```{r save final object}
+saveRDS(cluster_seurat, "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/Agingcluster_seurat.rds")
+```
