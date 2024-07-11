@@ -34,7 +34,7 @@ proj_path <- "/ix/djishnu/Zarifeh/ML_MM"
 data_path <- file.path(proj_path, "Aditi/")
 sc_sample_paths <- paste0(data_path, rep(c("aging_F7", "aging_F15", "aging_M4", "aging_M11")))
 count_paths <- file.path(sc_sample_paths, "outs/filtered_feature_bc_matrix") # input to seurat from cell-ranger
-out_path <- "/ix/djishnu/Akanksha/ERCC1_snRNA_analysis/ERCC1_exp/Seurat_analysis"
+out_path <- "/ix/djishnu/Akanksha/ERCC1_snRNA_analysis/ERCC1_exp/Seurat_analysis_outputs"
 sample_names <- c("F7_KO", "F15_WT", "M4_KO", "M11_WT")
 ```
 
@@ -252,7 +252,7 @@ cluster_counts_M11_WT_df["ID"] <- F7_KO_Cells_Clusters$ID
 write.csv(cluster_counts_M11_WT_df, "/ix/djishnu/Zarifeh/ML_MM/Aditi/result/ClusterSpecific_Cells/M11_WT_Cells_Clusters.csv")
 ```
 
-################### Prepare perturbed (KO) and unperturbed (WT) tables and umaps #########################################
+################################# Prepare perturbed (KO) and unperturbed (WT) tables and umaps #########################################
 
 ```{r }
 gene_names <- cluster_seurat@assays[["RNA"]]@meta.data[["var.features"]]
