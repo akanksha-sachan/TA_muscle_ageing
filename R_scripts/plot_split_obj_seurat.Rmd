@@ -28,6 +28,8 @@ library(ggplot2) # version should be >=3.5.0 from CRAN
 library(openxlsx)
 library(harmony)
 library(SingleR)
+library(reticulate)
+library(MuDataSeurat)
 
 # Directories
 proj_path <- "/ix/djishnu/Zarifeh/ML_MM"
@@ -82,6 +84,8 @@ metadata <- cluster_seurat@meta.data
 sample_names <- c("F7_KO", "F15_WT", "M4_KO", "M11_WT")
 # remove some redundant columns
 metadata <- metadata %>% select(-sample, -cells)
+# add celltype_label column
+metadata$cell_type <- Idents(cluster_seurat)
 # assign the condition based on if F7,M4 then KO or else WT
 metadata$condition <- ifelse(metadata$orig.ident %in% c("F7_KO", "M4_KO"), "KO", "WT")
 cluster_seurat@meta.data <- metadata
@@ -128,8 +132,23 @@ umap_WT <- DimPlot(condition_obj_list$WT, reduction = "umap", label = TRUE, pt.s
 ```
 
 ```{r save rds}
-saveRDS(condition_obj_list$KO, file = paste0(out_path, "/objects/KO_major_celltype_obj.rds"))
-saveRDS(condition_obj_list$WT, file = paste0(out_path, "/objects/WT_major_celltype_obj.rds"))
+saveRDS(condition_obj_list$KO, file = "/ix/djishnu/Akanksha/ERCC1_snRNA_analysis/Seurat_analysis_outputs/objects/Seurat_KO_major_celltype.rds")
+saveRDS(condition_obj_list$WT, file = "/ix/djishnu/Akanksha/ERCC1_snRNA_analysis/Seurat_analysis_outputs/objects/Seurat_WT_major_celltype.rds")
+```
+
+###### Get anndata objects for each condition
+
+```{r save anndata .h5ad}
+
+# read pre-made rds objects
+KO_seurat <- readRDS("/ix/djishnu/Akanksha/ERCC1_snRNA_analysis/Seurat_analysis_outputs/objects/Seurat_KO_major_celltype.rds")
+WT_seurat <- readRDS("/ix/djishnu/Akanksha/ERCC1_snRNA_analysis/Seurat_analysis_outputs/objects/Seurat_WT_major_celltype.rds")
+#print(head(KO_seurat@meta.data))
+
+#add cell type and counts to meta data column from idents
+# convert seurat objects to anndata objects
+MuDataSeurat::WriteH5AD(KO_seurat, "/ix/djishnu/Akanksha/ERCC1_snRNA_analysis/Seurat_analysis_outputs/objects/KO_major_celltype.h5ad", assay="RNA")
+MuDataSeurat::WriteH5AD(WT_seurat, "/ix/djishnu/Akanksha/ERCC1_snRNA_analysis/Seurat_analysis_outputs/objects/WT_major_celltype.h5ad", assay="RNA")
 ```
 
 # Batch effect between M/F samples per condition
