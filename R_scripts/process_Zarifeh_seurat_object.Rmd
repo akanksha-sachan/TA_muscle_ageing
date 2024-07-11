@@ -1,5 +1,4 @@
 ---
-# Code from Zarifeh
 # main script to identify the FastIIX, FastIIB, MuSC, FAPs major cell-types
 
 title: "scRNA analysis"
