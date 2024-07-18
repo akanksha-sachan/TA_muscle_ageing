@@ -205,7 +205,7 @@ Idents(seurat_obj) <- matrix$orig.ident
 ```{r FastIIB all DEGs}
 FastIIB.de.markers <- FindMarkers(seurat_obj, ident.1 = c("F7_KO_Fast IIB", "M4_KO_Fast IIB"), ident.2 = c("F15_WT_Fast IIB", "M11_WT_Fast IIB"), verbose = TRUE)
 head(FastIIB.de.markers)
-write.csv(FastIIB.de.markers, file.path(out_path, "/tables/FastIIB_unfiltered_KO_DEGs.csv"))
+# write.csv(FastIIB.de.markers, file.path(out_path, "/tables/FastIIB_unfiltered_KO_DEGs.csv"))
 df <- FastIIB.de.markers
 
 # plot DEGs
@@ -221,14 +221,14 @@ Vol_DEG <- EnhancedVolcano(df,
   drawConnectors = TRUE,
   title = "Fast IIB: All DEGs in KO vs. WT controls",
 )
-ggsave(file.path(out_path, "/plots/FastIIB_KO_DEGs.png"), plot = Vol_DEG, width = 10.1, height = 10.1)
+# ggsave(file.path(out_path, "/plots/FastIIB_KO_DEGs.png"), plot = Vol_DEG, width = 10.1, height = 10.1)
 ```
 
 ```{r FastIIB subset up and down regulated DEGs}
 # subset up and down regulated DEGs
 FastIIB_upregulated_KO_DEGs <- subset(FastIIB.de.markers, p_val_adj < 0.01 & avg_log2FC > 1)
 # cat(rownames(FastIIB_upregulated_KO_DEGs), sep = "\n")
-write.csv(FastIIB_upregulated_KO_DEGs, file.path(out_path, "/tables/FastIIB_upregulated_KO_DEGs.csv"))
+# write.csv(FastIIB_upregulated_KO_DEGs, file.path(out_path, "/tables/FastIIB_upregulated_KO_DEGs.csv"))
 
 FastIIB_downregulated_KO_DEGs <- subset(FastIIB.de.markers, p_val_adj < 0.01 & avg_log2FC < -1)
 # cat(rownames(FastIIB_downregulated_KO_DEGs), sep = "\n")
@@ -250,7 +250,7 @@ Vol_up_DEG <- EnhancedVolcano(df_up,
   drawConnectors = TRUE,
   title = "Fast IIB: Upregulated DEGs in KO vs. WT controls",
 )
-ggsave(file.path(out_path, "/plots/FastIIB_KO_upregulated_DEGs.png"), plot = Vol_up_DEG, width = 10.1, height = 10.1)
+# ggsave(file.path(out_path, "/plots/FastIIB_KO_upregulated_DEGs.png"), plot = Vol_up_DEG, width = 10.1, height = 10.1)
 
 # plot downregulated DEGs
 Vol_down_DEG <- EnhancedVolcano(df_down,
@@ -263,13 +263,13 @@ Vol_down_DEG <- EnhancedVolcano(df_down,
   drawConnectors = TRUE,
   title = "Fast IIB: Downregulated DEGs in KO vs. WT controls",
 )
-ggsave(file.path(out_path, "/plots/FastIIB_KO_downregulated_DEGs.png"), plot = Vol_down_DEG, width = 10.1, height = 10.1)
+# ggsave(file.path(out_path, "/plots/FastIIB_KO_downregulated_DEGs.png"), plot = Vol_down_DEG, width = 10.1, height = 10.1)
 ```
 
 ```{r FastIIX all DEGs}
 FastIIX.de.markers <- FindMarkers(seurat_obj, ident.1 = c("F7_KO_Fast IIX", "M4_KO_Fast IIX"), ident.2 = c("F15_WT_Fast IIX", "M11_WT_Fast IIX"), verbose = TRUE)
 head(FastIIX.de.markers)
-write.csv(FastIIX.de.markers, file.path(out_path, "/tables/FastIIX_unfiltered_KO_DEGs.csv"))
+# write.csv(FastIIX.de.markers, file.path(out_path, "/tables/FastIIX_unfiltered_KO_DEGs.csv"))
 df <- FastIIX.de.markers
 
 # plot DEGs
@@ -285,7 +285,7 @@ Vol_DEG <- EnhancedVolcano(df,
   drawConnectors = TRUE,
   title = "Fast IIX: All DEGs in KO vs. WT controls",
 )
-ggsave(file.path(out_path, "/plots/FastIIX_KO_DEGs.png"), plot = Vol_DEG, width = 10.1, height = 10.1)
+# ggsave(file.path(out_path, "/plots/FastIIX_KO_DEGs.png"), plot = Vol_DEG, width = 10.1, height = 10.1)
 ```
 
 ```{r FastIIX subset up and down regulated DEGs}
@@ -294,7 +294,7 @@ FastIIX_upregulated_KO_DEGs <- subset(FastIIX.de.markers, p_val_adj < 0.01 & avg
 write.csv(FastIIX_upregulated_KO_DEGs, file.path(out_path, "/tables/FastIIX_upregulated_KO_DEGs.csv"))
 
 FastIIX_downregulated_KO_DEGs <- subset(FastIIX.de.markers, p_val_adj < 0.01 & avg_log2FC < -1)
-write.csv(FastIIX_downregulated_KO_DEGs, file.path(out_path, "/tables/FastIIX_downregulated_KO_DEGs.csv"))
+# write.csv(FastIIX_downregulated_KO_DEGs, file.path(out_path, "/tables/FastIIX_downregulated_KO_DEGs.csv"))
 
 FC_up_threshold <- 1
 FC_down_threshold <- -1
@@ -312,7 +312,7 @@ Vol_up_DEG <- EnhancedVolcano(df_up,
   drawConnectors = TRUE,
   title = "Fast IIX: Upregulated DEGs in KO vs. WT controls",
 )
-ggsave(file.path(out_path, "/plots/FastIIX_KO_upregulated_DEGs.png"), plot = Vol_up_DEG, width = 10.1, height = 10.1)
+# ggsave(file.path(out_path, "/plots/FastIIX_KO_upregulated_DEGs.png"), plot = Vol_up_DEG, width = 10.1, height = 10.1)
 
 # plot downregulated DEGs
 Vol_down_DEG <- EnhancedVolcano(df_down,
@@ -325,7 +325,7 @@ Vol_down_DEG <- EnhancedVolcano(df_down,
   drawConnectors = TRUE,
   title = "Fast IIX: Downregulated DEGs in KO vs. WT controls",
 )
-ggsave(file.path(out_path, "/plots/FastIIX_KO_downregulated_DEGs.png"), plot = Vol_down_DEG, width = 10.1, height = 10.1)
+# ggsave(file.path(out_path, "/plots/FastIIX_KO_downregulated_DEGs.png"), plot = Vol_down_DEG, width = 10.1, height = 10.1)
 ```
 
 ```{r FAPs all DEGs}
@@ -451,10 +451,51 @@ Vol_down_DEG <- EnhancedVolcano(df_down,
 ggsave(file.path(out_path, "/plots/MuSc_KO_downregulated_DEGs.png"), plot = Vol_down_DEG, width = 10.1, height = 10.1)
 ```
 
+# Check for ercc1 in other cell types DEG
+```{r MTJ all DEGs}
+MTJ.de.markers <- FindMarkers(seurat_obj, ident.1 = c("F7_KO_MTJ", "M4_KO_MTJ"), ident.2 = c("F15_WT_MTJ", "M11_WT_MTJ"), verbose = TRUE)
+head(MTJ.de.markers)
+write.csv(MTJ.de.markers, file.path(out_path, "/tables/MTJ_unfiltered_KO_DEGs.csv"))
+```
+```{r EC all DEGs}
+EC.de.markers <- FindMarkers(seurat_obj, ident.1 = c("F7_KO_EC", "M4_KO_EC"), ident.2 = c("F15_WT_EC", "M11_WT_EC"), verbose = TRUE)
+head(EC.de.markers)
+write.csv(EC.de.markers, file.path(out_path, "/tables/EC_unfiltered_KO_DEGs.csv"))
+```
+```{r Pericyte all DEGs}
+Pericyte.de.markers <- FindMarkers(seurat_obj, ident.1 = c("F7_KO_Pericyte", "M4_KO_Pericyte"), ident.2 = c("F15_WT_Pericyte", "M11_WT_Pericyte"), verbose = TRUE)
+head(Pericyte.de.markers)
+write.csv(Pericyte.de.markers, file.path(out_path, "/tables/Pericyte_unfiltered_KO_DEGs.csv"))
+```
+```{r Macrophages all DEGs}
+Macrophages.de.markers <- FindMarkers(seurat_obj, ident.1 = c("F7_KO_Macrophages", "M4_KO_Macrophages"), ident.2 = c("F15_WT_Macrophages", "M11_WT_Macrophages"), verbose = TRUE)
+head(Macrophages.de.markers)
+write.csv(Macrophages.de.markers, file.path(out_path, "/tables/Macrophages_unfiltered_KO_DEGs.csv"))
+```
+```{r NMJ all DEGs}
+NMJ.de.markers <- FindMarkers(seurat_obj, ident.1 = c("F7_KO_NMJ", "M4_KO_NMJ"), ident.2 = c("F15_WT_NMJ", "M11_WT_NMJ"), verbose = TRUE)
+head(NMJ.de.markers)
+write.csv(NMJ.de.markers, file.path(out_path, "/tables/NMJ_unfiltered_KO_DEGs.csv"))
+```
+```{r Tendon all DEGs}
+Tendon.de.markers <- FindMarkers(seurat_obj, ident.1 = c("F7_KO_Tendon", "M4_KO_Tendon"), ident.2 = c("F15_WT_Tendon", "M11_WT_Tendon"), verbose = TRUE)
+head(Tendon.de.markers)
+write.csv(Tendon.de.markers, file.path(out_path, "/tables/Tendon_unfiltered_KO_DEGs.csv"))
+```
+
 # Feature plot for specific genes of interest
 
 # Save seurat_obj with the cell_id metadata column added for the major cell-type labels
 
 ```{r save final object}
-saveRDS(cluster_seurat, file.path(out_path, "/objects/Seurat_cell_type_labeled_all_cells.rds"))
+# saveRDS(cluster_seurat, file.path(out_path, "/objects/Seurat_cell_type_labeled_all_cells.rds"))
+# reads the QC pre-processed seurat obj, which contains one layer for all sample cells (merged), and 10 cell-type labels
+celltype_seurat <- readRDS(file.path(out_path, "/objects/Seurat_cell_type_labeled_all_cells.rds"))
+```
+```{r inspect metadata}
+print(head(celltype_seurat@meta.data))
+```
+```{r save anndata .h5ad}
+# convert seurat object to anndata object
+MuDataSeurat::WriteH5AD(celltype_seurat, file.path(out_path, "/objects/major_celltype_seurat.h5ad"), assay = "RNA")
 ```
