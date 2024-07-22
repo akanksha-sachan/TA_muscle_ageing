@@ -488,9 +488,9 @@ write.csv(Tendon.de.markers, file.path(out_path, "/tables/Tendon_unfiltered_KO_D
 # Save seurat_obj with the cell_id metadata column added for the major cell-type labels
 
 ```{r save final object}
-# saveRDS(cluster_seurat, file.path(out_path, "/objects/Seurat_cell_type_labeled_all_cells.rds"))
+saveRDS(cluster_seurat, file.path(out_path, "/objects/Seurat_cell_type_labeled_all_cells.rds"))
 # reads the QC pre-processed seurat obj, which contains one layer for all sample cells (merged), and 10 cell-type labels
-celltype_seurat <- readRDS(file.path(out_path, "/objects/Seurat_cell_type_labeled_all_cells.rds"))
+# celltype_seurat <- readRDS(file.path(out_path, "/objects/Seurat_cell_type_labeled_all_cells.rds"))
 ```
 ```{r inspect metadata}
 print(head(celltype_seurat@meta.data))
