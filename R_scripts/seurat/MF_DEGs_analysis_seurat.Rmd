@@ -1,0 +1,96 @@
+---
+# DEG analysis script (M/F specific DEGs)
+
+title: "scRNA analysis"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true # table of content true
+    toc_depth: 1
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+    number_sections: false  ## if you want number sections at each table header
+    theme: united 
+    highlight: tango  
+---
+
+# Load libraries and Directories
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+library(stringr)
+library(dplyr)
+library(Seurat)
+library(patchwork)
+library(ggplot2) # version should be >=3.5.0 from CRAN
+library(openxlsx)
+library(harmony)
+library(SingleR)
+library(reticulate)
+library(MuDataSeurat)
+library(EnhancedVolcano)
+
+# Directories
+out_path <- "/ix/djishnu/Akanksha/snRNA_TA_muscle_analysis/Seurat_analysis_outputs"
+sample_names <- c("F7_KO", "F15_WT", "M4_KO", "M11_WT")
+```
+
+# Load the QC filtered seurat object with cell embeddings 
+``` {r Reading seurat object}
+# reads the QC pre-processed seurat obj, which contains one layer for all sample cells (merged), and 10 cell-type labels
+seurat_obj <- readRDS(file.path(out_path, "/objects/Seurat_cell_type_labeled_all_cells.rds"))
+```
+```{r updating orig.ident with sample_condition_celltype}
+metadata <- seurat_obj@meta.data
+metadata$orig.ident <- paste(metadata$orig.ident, metadata$cell_type, sep = "_")
+Idents(seurat_obj) <- metadata$orig.ident
+seurat_obj@meta.data <- metadata
+print(head(seurat_obj@meta.data))
+```
+
+################################## DEGs specific to gender (M/F) ##################################
+# DEG analysis for Female and Male cell populations
+```{r function for gender specific DEG}
+DEG_analysis <- function(gender_ko, gender_wt, cell_type, gender) {
+  # Define variables
+  ko_ident <- paste0(gender_ko, "_", cell_type)
+  wt_ident <- paste0(gender_wt, "_", cell_type)
+  title <- paste0(cell_type, paste0(": DEGs in KO vs. WT controls for ", gender, " samples"))
+  unfiltered_csv <- file.path(out_path, paste0("/tables/", gender, "_", cell_type, "_unfiltered_KO_DEGs.csv"))
+  plot_png <- file.path(out_path, paste0("/plots/", gender, "_", cell_type, "_KO_DEGs.png"))
+  upregulated_csv <- file.path(out_path, paste0("/tables/", gender, "_", cell_type, "_upregulated_KO_DEGs.csv"))
+  downregulated_csv <- file.path(out_path, paste0("/tables/", gender, "_", cell_type, "_downregulated_KO_DEGs.csv"))
+
+  # Find markers
+  markers <- FindMarkers(seurat_obj, ident.1 = ko_ident, ident.2 = wt_ident, verbose = TRUE)
+  write.csv(markers, unfiltered_csv)
+  df <- markers
+
+  # Plot DEGs
+  significance_filter <- 0.01
+  FC_threshold <- 1
+  Vol_DEG <- EnhancedVolcano(df,
+    rownames(df),
+    x = "avg_log2FC",
+    y = "p_val_adj",
+    pCutoff = significance_filter,
+    FCcutoff = FC_threshold,
+    pointSize = 2,
+    drawConnectors = TRUE,
+    title = title
+  )
+  ggsave(plot_png, plot = Vol_DEG, width = 10.1, height = 10.1)
+
+  # Subset up and downregulated DEGs
+  upregulated_KO_DEGs <- subset(markers, p_val_adj < 0.01 & avg_log2FC > 1)
+  write.csv(upregulated_KO_DEGs, upregulated_csv)
+
+  downregulated_KO_DEGs <- subset(markers, p_val_adj < 0.01 & avg_log2FC < -1)
+  write.csv(downregulated_KO_DEGs, downregulated_csv)
+}
+# run the function: params - sample_KO, sample_WT, cell_type, Female/Male
+DEG_analysis("M4_KO", "M11_WT", "FAPs", "Male")
+```
+################################## Genes of interest in Cell embeddings ##################################
+# Feature plot for specific genes of interest to see which cell types express them
