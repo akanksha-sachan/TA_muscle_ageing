@@ -40,17 +40,42 @@ sample_names <- c("F7_KO", "F15_WT", "M4_KO", "M11_WT")
 ``` {r Reading seurat object}
 # reads the QC pre-processed seurat obj, which contains one layer for all sample cells (merged), and 10 cell-type labels
 seurat_obj <- readRDS(file.path(out_path, "/objects/Seurat_cell_type_labeled_all_cells.rds"))
+print(head(seurat_obj@meta.data))
 ```
-```{r updating orig.ident with sample_condition_celltype}
+```{r print colors from a palette}
+DiscretePalette(n = 4, palette = "alphabet", shuffle = FALSE)
+```
+```{r plot umaps}
+umap_sample <- DimPlot(seurat_obj, reduction = "umap", label = TRUE, group.by = "orig.ident", cols = c("#FF5733", "#33FF57", "#3357FF", "#FFD700"), pt.size = 1)
+ggsave(file.path(out_path, "/plots/mouse_sample_labels.png"), plot = umap_sample, width = 10.1, height = 10.1)
+```
+################################## UMAPs specific to gender (M/F) ##################################
+```{r split the whole seurat object into gender specific objects}
+# split the object based on condition metadata
+gender_obj_list <- SplitObject(seurat_obj, split.by = "gender")
+gender_obj_list$F
+print(head(gender_obj_list$F@meta.data))
+gender_obj_list$M
+print(head(gender_obj_list$M@meta.data))
+```
+```{r plot MF sample umaps}
+# plot umaps
+# "#FF5733", "#33FF57" for females
+umap_F_sample <- DimPlot(gender_obj_list$F, reduction = "umap", label = TRUE, group.by = "orig.ident", cols = c("#FF5733", "#33FF57"), pt.size = 1)
+ggsave(file.path(out_path, "/plots/female_sample_labels.png"), plot = umap_F_sample, width = 10.1, height = 10.1)
+umap_M_sample <- DimPlot(gender_obj_list$M, reduction = "umap", label = TRUE, group.by = "orig.ident", cols = c("#3357FF", "#FFD700"), pt.size = 1)
+ggsave(file.path(out_path, "/plots/male_sample_labels.png"), plot = umap_M_sample, width = 10.1, height = 10.1)
+```
+
+################################## DEGs specific to gender (M/F) ##################################
+# DEG analysis for Female and Male cell populations
+```{r updating orig.ident with sample+condition_celltype for FindMarkers function}
 metadata <- seurat_obj@meta.data
 metadata$orig.ident <- paste(metadata$orig.ident, metadata$cell_type, sep = "_")
 Idents(seurat_obj) <- metadata$orig.ident
 seurat_obj@meta.data <- metadata
 print(head(seurat_obj@meta.data))
 ```
-
-################################## DEGs specific to gender (M/F) ##################################
-# DEG analysis for Female and Male cell populations
 ```{r function for gender specific DEG}
 DEG_analysis <- function(gender_ko, gender_wt, cell_type, gender) {
   # Define variables
@@ -93,4 +118,135 @@ DEG_analysis <- function(gender_ko, gender_wt, cell_type, gender) {
 DEG_analysis("M4_KO", "M11_WT", "FAPs", "Male")
 ```
 ################################## Genes of interest in Cell embeddings ##################################
-# Feature plot for specific genes of interest to see which cell types express them
+# Genes of interest: CDKN1A/MYH8/COL19A1/LRRK2/EDAR2/ and ATP2A1; common genes between MF (MALAT1, mt-co2, mt-co3, mt-atp6)
+```{r ercc1, ercc4}
+FeaturePlot(seurat_obj, features = c("Ercc1", "Ercc4"), min.cutoff = "q10", max.cutoff = "q90", ncol = 2)
+ggplot2::ggsave(file.path(out_path, "/plots/ercc1_ercc4.png"), width = 10.1, height = 10.1)
+```
+```{r tpm2}
+FeaturePlot(seurat_obj, features = c("Xist", "Ptprg"), min.cutoff = "q10", max.cutoff = "q90", ncol = 1)
+ggplot2::ggsave(file.path(out_path, "/plots/Xist_Ptprg_all_cells.png"), width = 10.1, height = 10.1)
+```
+```{r feature plot for common genes in MF}
+FeaturePlot(seurat_obj, features = c("Malat1", "mt-Co2", "mt-Co3", "mt-Atp6"), min.cutoff = "q10", max.cutoff = "q90", ncol = 4)
+ggplot2::ggsave(file.path(out_path, paste0("/plots/common_MF_DEGs.png")), width = 12, height = 6, dpi = 300)
+```
+```{r feature plot for genes of interest (per-gene)}
+FeaturePlot(seurat_obj, features = c("Cdkn1a", "Myh8", "Col19a1", "Lrrk2", "Eda2r", "Atp2a1"), min.cutoff = "q10", max.cutoff = "q90", ncol = 3)
+ggplot2::ggsave(file.path(out_path, paste0("/plots/genes_of_interest_cell_embeddings.png")), width = 12, height = 6, dpi = 300)
+```
+```{r feature plot for genes of interest (gene-combinations)}
+# FeaturePlot(seurat_obj, features = c("Lrrk2", "Eda2r"), min.cutoff = "q10", max.cutoff = "q90", blend = TRUE)
+# ggplot2::ggsave(file.path(out_path, paste0("/plots/coexpression_Lrrk2_Eda2r.png")), width = 12, height = 6, dpi = 300)
+```
+```{r split the whole seurat object into condition specific objects}
+# split the object based on condition metadata
+condition_obj_list <- SplitObject(seurat_obj, split.by = "condition")
+condition_obj_list$KO
+print(head(condition_obj_list$KO@meta.data))
+condition_obj_list$WT
+print(head(condition_obj_list$WT@meta.data))
+```
+```{r function for generating feature plots}
+# Function to generate feature plots for a specific object type
+plot_feature_for_object <- function(condition_obj_list, plot_str, obj_type, features, out_path) {
+  # Generate the feature plot
+  p <- FeaturePlot(condition_obj_list[[obj_type]],
+    features = features,
+    min.cutoff = "q10",
+    max.cutoff = "q90",
+    ncol = 1
+  )
+
+  # Save the plot
+  ggsave(file.path(out_path, paste0("/plots/", plot_str, obj_type, "_cells.png")),
+    plot = p,
+    width = 12,
+    height = 6,
+    dpi = 300
+  )
+}
+# Plot for KO/WT/all cells
+# common_MF_DEGs <- c("Malat1", "mt-Co2", "mt-Co3", "mt-Atp6")
+# plot_feature_for_object(condition_obj_list, "common_MF_DEGs_", "WT", common_MF_DEGs, out_path)
+genes_of_interest <- c("Tpm2")
+plot_feature_for_object(condition_obj_list, "tpm2_", "WT", genes_of_interest, out_path)
+# dna_damage_genes <- c("Ercc1", "Ercc4")
+# plot_feature_for_object(condition_obj_list, "dna_damage_genes_", "KO", dna_damage_genes, out_path)
+```
+
+################################## what is unique to a specific cell population? ##################################
+```{r hover plot for specific cell population study in all samples}
+type1_plot <- DimPlot(seurat_obj, reduction = "umap", label = TRUE, group.by = "orig.ident", pt.size = 1)
+select.cells <- CellSelector(plot = type1_plot)
+head(select.cells)
+```
+```{r finding markers for the selected cells}
+Idents(seurat_obj, cells = select.cells) <- "NewCells"
+
+# Now, we find markers that are specific to the new cells, and find clear DC markers
+newcells.markers <- FindMarkers(seurat_obj,
+  ident.1 = "NewCells", ident.2 = "M11_WT", min.diff.pct = 0.3
+)
+head(newcells.markers)
+write.csv(newcells.markers, file.path(out_path, paste0("/tables/newcells_vs_MWT_markers.csv")))
+df <- newcells.markers
+# Plot DEGs
+significance_filter <- 0.01
+FC_threshold <- 1
+Vol_DEG <- EnhancedVolcano(df,
+  rownames(df),
+  x = "avg_log2FC",
+  y = "p_val_adj",
+  pCutoff = significance_filter,
+  FCcutoff = FC_threshold,
+  pointSize = 2,
+  drawConnectors = TRUE,
+  title = "NewCells: DEGs as compared with M_WT cells"
+)
+ggsave(file.path(out_path, paste0("/plots/newcells_vs_MWT_DEGs.png")), plot = Vol_DEG, width = 10.1, height = 10.1)
+```
+################################## subsetting to only four celltypes for heatmap ##################################
+```{r separate selected celltypes into a different object}
+# separate the selected cell types into a new object
+muscle_obj <- subset(seurat_obj, idents = c("Fast IIB", "Fast IIX", "FAPs", "Skeleton MuSc"))
+print(table(Idents(muscle_obj)))
+print(head(muscle_obj@meta.data))
+```
+```{r split the whole seurat object into condition specific objects}
+# split the object based on condition metadata
+condition_muscle_obj_list <- SplitObject(muscle_obj, split.by = "condition")
+condition_muscle_obj_list$KO
+print(head(condition_muscle_obj_list$KO@meta.data))
+condition_muscle_obj_list$WT
+print(head(condition_muscle_obj_list$WT@meta.data))
+```
+
+```
+```{r function for generating heatmaps}
+# Function to generate feature plots for a specific object type
+plot_heat_for_object <- function(object, obj_type, features, out_path) {
+  # scale data for these features
+  object <- ScaleData(object, features = features)
+  # plot heatmap
+  p <- DoHeatmap(
+    object = object, features = features,
+    group.by = "ident"
+  )
+  # Save the plot
+  ggsave(file.path(out_path, paste0("/plots/heat_interest_", obj_type, "_cells.png")),
+    plot = p,
+    width = 12,
+    height = 6,
+    dpi = 300
+  )
+}
+heatmap_markers <- c("Cdkn1a", "Myh8", "Col19a1", "Lrrk2", "Eda2r", "Atp2a1")
+# Plot for KO cells
+plot_heat_for_object(condition_muscle_obj_list$WT, "WT", heatmap_markers, out_path)
+```
+
+```{r correlation of GE plot}
+correl <- FeatureScatter(object = muscle_obj, feature1 = "Cdkn1a", feature2 = "Myh8")
+ggsave(file.path(out_path, "/plots/correl_cdkn1a_myh8.png"), plot = correl, width = 10.1, height = 10.1)
+```

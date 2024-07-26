@@ -88,6 +88,8 @@ metadata <- metadata %>% select(-sample, -cells, -RNA_snn_res.0.8)
 metadata$cell_type <- Idents(cluster_seurat)
 # assign the condition based on if F7,M4 then KO or else WT
 metadata$condition <- ifelse(metadata$orig.ident %in% c("F7_KO", "M4_KO"), "KO", "WT")
+# assign the gender based on if F7,F15 then F or else M
+metadata$gender <- ifelse(metadata$orig.ident %in% c("F7_KO", "F15_WT"), "F", "M")
 cluster_seurat@meta.data <- metadata
 print(head(metadata))
 ```
