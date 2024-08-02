@@ -605,3 +605,9 @@ VlnPlot(cluster_seurat,
 )
 ggsave(file.path(out_path, "AditiNewref_markers_vlnplot6.png"))
 ```
+
+# Order of cells in seurat object
+# F7 : [ ,1:10169]
+# F15 : [ ,10170:19875]
+# M4 : [ ,19876:31893]
+# M11 : [ ,31894:40106]
