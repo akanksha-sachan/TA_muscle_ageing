@@ -21,14 +21,14 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 library(stringr)
 library(dplyr)
-library(Seurat)
+library(Seurat) # Use CRC's R lib
 library(patchwork)
 library(ggplot2) # version should be >=3.5.0 from CRAN
 library(openxlsx)
 library(harmony)
 library(SingleR)
 library(reticulate)
-library(MuDataSeurat)
+#library(MuDataSeurat) #to convert Rds to h5ad
 library(EnhancedVolcano)
 
 # Directories
@@ -97,10 +97,10 @@ DEG_analysis <- function(gender_ko, gender_wt, cell_type, gender) {
   ko_ident <- paste0(gender_ko, "_", cell_type)
   wt_ident <- paste0(gender_wt, "_", cell_type)
   title <- paste0(cell_type, paste0(": DEGs in KO vs. WT controls for ", gender, " samples"))
-  unfiltered_csv <- file.path(out_path, paste0("/tables/", gender, "_", cell_type, "_unfiltered_KO_DEGs.csv"))
-  plot_png <- file.path(out_path, paste0("/plots/", gender, "_", cell_type, "_KO_DEGs.png"))
-  upregulated_csv <- file.path(out_path, paste0("/tables/", gender, "_", cell_type, "_upregulated_KO_DEGs.csv"))
-  downregulated_csv <- file.path(out_path, paste0("/tables/", gender, "_", cell_type, "_downregulated_KO_DEGs.csv"))
+  unfiltered_csv <- file.path(out_path, paste0("/tables/", gender, "_", cell_type, "_unfiltered_KO_DEGs_nmt.csv"))
+  plot_png <- file.path(out_path, paste0("/plots/", gender, "_", cell_type, "_KO_DEGs_nmt.png"))
+  upregulated_csv <- file.path(out_path, paste0("/tables/", gender, "_", cell_type, "_upregulated_KO_DEGs_nmt.csv"))
+  downregulated_csv <- file.path(out_path, paste0("/tables/", gender, "_", cell_type, "_downregulated_KO_DEGs_nmt.csv"))
 
   # Find markers
   markers <- FindMarkers(seurat_obj, ident.1 = ko_ident, ident.2 = wt_ident, verbose = TRUE)
@@ -129,8 +129,8 @@ DEG_analysis <- function(gender_ko, gender_wt, cell_type, gender) {
   downregulated_KO_DEGs <- subset(markers, p_val_adj < 0.01 & avg_log2FC < -1)
   write.csv(downregulated_KO_DEGs, downregulated_csv)
 }
-# run the function: params - sample_KO, sample_WT, cell_type, Female/Male
-DEG_analysis("M4_KO", "M11_WT", "FAPs", "Male")
+# run the function: params - sample_KO, sample_WT, cell_type (Fast IIX, Fast IIB, FAPs, Skeleton MuSc), Female/Male
+DEG_analysis("F7_KO", "F15_WT", "Fast IIX", "Female")
 ```
 ################################## Genes of interest in Cell embeddings ##################################
 # Genes of interest: CDKN1A/MYH8/COL19A1/LRRK2/EDAR2/ and ATP2A1; common genes between MF (MALAT1, mt-co2, mt-co3, mt-atp6)
