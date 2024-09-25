@@ -67,8 +67,23 @@ umap_M_sample <- DimPlot(gender_obj_list$M, reduction = "umap", label = TRUE, gr
 ggsave(file.path(out_path, "/plots/male_sample_labels.png"), plot = umap_M_sample, width = 10.1, height = 10.1)
 ```
 
-################################## DEGs specific to gender (M/F) ##################################
 # DEG analysis for Female and Male cell populations
+################################## Filtering out non-nuclear DNA mapped genes before DEGs #######################
+``` {r filtering mitochondrial mt-named genes}
+# Get the gene names
+all_genes <- rownames(seurat_obj)
+
+# Filter out the genes that start with "mt-"
+filtered_genes <- all_genes[!grepl("^mt-", all_genes)]
+
+# Subset the Seurat object to exclude mitochondrial genes
+seurat_obj <- subset(seurat_obj, features = filtered_genes)
+
+# Check the new gene list without mt- genes
+print(head(rownames(seurat_obj)))
+```
+
+################################## DEGs specific to gender (M/F) ##################################
 ```{r updating orig.ident with sample+condition_celltype for FindMarkers function}
 metadata <- seurat_obj@meta.data
 metadata$orig.ident <- paste(metadata$orig.ident, metadata$cell_type, sep = "_")
