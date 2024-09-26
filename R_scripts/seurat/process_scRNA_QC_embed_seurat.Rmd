@@ -434,7 +434,7 @@ ggsave(file.path(out_path, "markers_4.png"))
 # top20_shared$cell_type[16] <- "MF-I, MF-IIB, MF-IIX, MF-IIA, NMJ, MTJ, MF-other"
 ```
 
-# Reclustering CD4+ Tcells (reducing cluster numbers)
+# Reclustering (reducing cluster numbers)
 
 ## Gene marker visualiztion
 ## Renaming clusters based on scores
