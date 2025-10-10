@@ -278,9 +278,9 @@ def gmt_to_decoupler(pth: Path) -> pd.DataFrame:
     )
 
 # Calculate percentages for each condition
-def get_cell_type_percentages(adata):
-    wt_cells = adata[adata.obs['condition'] == 'WT'].obs['cell_type'].value_counts(normalize=True) * 100
-    ko_cells = adata[adata.obs['condition'] == 'KO'].obs['cell_type'].value_counts(normalize=True) * 100
+def get_cell_type_percentages(adata, cell_type_label='cell_type'):
+    wt_cells = adata[adata.obs['condition'] == 'WT'].obs[cell_type_label].value_counts(normalize=True) * 100
+    ko_cells = adata[adata.obs['condition'] == 'KO'].obs[cell_type_label].value_counts(normalize=True) * 100
     df = pd.DataFrame({
         'Cell Type': wt_cells.index,
         'WT%': wt_cells.values.round(2),
@@ -288,12 +288,12 @@ def get_cell_type_percentages(adata):
     })
     return df
 
-def get_cell_type_percentages_by_sex(adata):
+def get_cell_type_percentages_by_sex(adata, cell_type_label='cell_type'):
     # Calculate percentages for each combination of condition and sex
-    wt_female = adata[(adata.obs['condition'] == 'WT') & (adata.obs['sex'] == 'F')].obs['cell_type'].value_counts(normalize=True) * 100
-    wt_male = adata[(adata.obs['condition'] == 'WT') & (adata.obs['sex'] == 'M')].obs['cell_type'].value_counts(normalize=True) * 100
-    ko_female = adata[(adata.obs['condition'] == 'KO') & (adata.obs['sex'] == 'F')].obs['cell_type'].value_counts(normalize=True) * 100
-    ko_male = adata[(adata.obs['condition'] == 'KO') & (adata.obs['sex'] == 'M')].obs['cell_type'].value_counts(normalize=True) * 100
+    wt_female = adata[(adata.obs['condition'] == 'WT') & (adata.obs['sex'] == 'F')].obs[cell_type_label].value_counts(normalize=True) * 100
+    wt_male = adata[(adata.obs['condition'] == 'WT') & (adata.obs['sex'] == 'M')].obs[cell_type_label].value_counts(normalize=True) * 100
+    ko_female = adata[(adata.obs['condition'] == 'KO') & (adata.obs['sex'] == 'F')].obs[cell_type_label].value_counts(normalize=True) * 100
+    ko_male = adata[(adata.obs['condition'] == 'KO') & (adata.obs['sex'] == 'M')].obs[cell_type_label].value_counts(normalize=True) * 100
     df = pd.DataFrame({
         'Cell Type': wt_female.index,
         'WT F%': wt_female.values.round(2),
