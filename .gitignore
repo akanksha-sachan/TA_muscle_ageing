@@ -1,1 +1,5 @@
+# Data files
 *.h5ad
+
+# Logs and temporary files
+py_scripts/preproc/lightning_logs/
