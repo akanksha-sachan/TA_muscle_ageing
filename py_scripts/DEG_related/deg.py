@@ -180,6 +180,119 @@ def visualize_deg_results(result_df, sex_label, output_dir):
     
     return fig
 
+def create_volcano_plot(degs, cell_type, top_n=10, save=True):
+    """
+    Create volcano plot for DEGs
+    
+    Parameters:
+    -----------
+    degs : DataFrame
+        DEG results from scanpy
+    cell_type : str
+        Name of cell type
+    top_n : int
+        Number of top genes to label
+    save : bool
+        Whether to save the plot
+    """
+    # Create figure
+    fig, ax = plt.subplots(figsize=(10, 8))
+    
+    # Calculate -log10(p-value)
+    degs['-log10_padj'] = -np.log10(degs['pvals_adj'].replace(0, 1e-300))  # Handle p=0
+    
+    # Define significance thresholds
+    pval_thresh = 0.05
+    fc_thresh = 0.5
+    
+    # Classify genes
+    degs['significant'] = 'Not Significant'
+    degs.loc[
+        (degs['pvals_adj'] < pval_thresh) & (degs['logfoldchanges'] > fc_thresh),
+        'significant'
+    ] = 'Upregulated'
+    degs.loc[
+        (degs['pvals_adj'] < pval_thresh) & (degs['logfoldchanges'] < -fc_thresh),
+        'significant'
+    ] = 'Downregulated'
+    
+    # Color map
+    colors = {'Upregulated': '#d62728', 'Downregulated': '#1f77b4', 'Not Significant': '#7f7f7f'}
+    
+    # Plot points
+    for category, color in colors.items():
+        mask = degs['significant'] == category
+        ax.scatter(
+            degs.loc[mask, 'logfoldchanges'],
+            degs.loc[mask, '-log10_padj'],
+            c=color,
+            label=category,
+            alpha=0.6,
+            s=20,
+            edgecolors='none'
+        )
+    
+    # Add threshold lines
+    ax.axhline(-np.log10(pval_thresh), color='black', linestyle='--', linewidth=1, alpha=0.5)
+    ax.axvline(fc_thresh, color='black', linestyle='--', linewidth=1, alpha=0.5)
+    ax.axvline(-fc_thresh, color='black', linestyle='--', linewidth=1, alpha=0.5)
+    
+    # Label top genes
+    sig_degs = degs[degs['significant'] != 'Not Significant'].copy()
+    if len(sig_degs) > 0:
+        # Top upregulated
+        top_up = sig_degs[sig_degs['logfoldchanges'] > 0].nlargest(top_n, 'logfoldchanges')
+        # Top downregulated
+        top_down = sig_degs[sig_degs['logfoldchanges'] < 0].nsmallest(top_n, 'logfoldchanges')
+        # Combine
+        top_genes = pd.concat([top_up, top_down])
+        
+        for idx, row in top_genes.iterrows():
+            ax.annotate(
+                row['names'],
+                xy=(row['logfoldchanges'], row['-log10_padj']),
+                xytext=(5, 5),
+                textcoords='offset points',
+                fontsize=8,
+                alpha=0.8
+            )
+    
+    # Count genes
+    n_up = (degs['significant'] == 'Upregulated').sum()
+    n_down = (degs['significant'] == 'Downregulated').sum()
+    n_total = len(degs)
+    
+    # Labels and title
+    ax.set_xlabel('Log2 Fold Change (KO / WT)', fontsize=12, fontweight='bold')
+    ax.set_ylabel('-Log10(Adjusted P-value)', fontsize=12, fontweight='bold')
+    ax.set_title(f'{cell_type}\nKO vs WT', fontsize=14, fontweight='bold', pad=20)
+    
+    # Add counts to legend
+    legend_labels = [
+        f'Upregulated ({n_up})',
+        f'Downregulated ({n_down})',
+        f'Not Significant ({n_total - n_up - n_down})'
+    ]
+    handles, _ = ax.get_legend_handles_labels()
+    ax.legend(handles, legend_labels, loc='upper right', frameon=True, fancybox=True, shadow=True)
+    
+    # Grid
+    ax.grid(True, alpha=0.3, linestyle=':', linewidth=0.5)
+    ax.set_axisbelow(True)
+    
+    plt.tight_layout()
+    
+    # Save
+    if save:
+        filename = f"volcano_KO_vs_WT_{cell_type.replace(' ', '_').replace('/', '_')}.png"
+        plt.savefig(filename, dpi=300, bbox_inches='tight')
+        print(f"  Saved: {filename}")
+    
+    plt.show()
+    plt.close()
+    
+    return fig, ax
+
 def save_deg_results(result_df, sex_label, output_dir):
     """
     Save DEG results to CSV files
