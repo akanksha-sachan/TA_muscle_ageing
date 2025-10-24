@@ -180,7 +180,7 @@ def visualize_deg_results(result_df, sex_label, output_dir):
     
     return fig
 
-def create_volcano_plot(degs, cell_type, top_n=10, save=True):
+def create_volcano_plot(degs, cell_type, top_n=10, xlim=(-5, 5), save=True):
     """
     Create volcano plot for DEGs
     
@@ -239,6 +239,9 @@ def create_volcano_plot(degs, cell_type, top_n=10, save=True):
     
     # Label top genes
     sig_degs = degs[degs['significant'] != 'Not Significant'].copy()
+    if xlim:
+        sig_degs = sig_degs[(sig_degs['logfoldchanges'] >= xlim[0]) & 
+                            (sig_degs['logfoldchanges'] <= xlim[1])]
     if len(sig_degs) > 0:
         # Top upregulated
         top_up = sig_degs[sig_degs['logfoldchanges'] > 0].nlargest(top_n, 'logfoldchanges')
@@ -267,6 +270,10 @@ def create_volcano_plot(degs, cell_type, top_n=10, save=True):
     ax.set_ylabel('-Log10(Adjusted P-value)', fontsize=12, fontweight='bold')
     ax.set_title(f'{cell_type}\nKO vs WT', fontsize=14, fontweight='bold', pad=20)
     
+    # Set x-axis limits
+    if xlim:
+        ax.set_xlim(xlim)
+
     # Add counts to legend
     legend_labels = [
         f'Upregulated ({n_up})',
