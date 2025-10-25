@@ -3,3 +3,4 @@
 
 # Logs and temporary files
 py_scripts/preproc/lightning_logs/s
+bash_scripts/*.log
