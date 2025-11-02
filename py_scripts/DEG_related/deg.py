@@ -180,7 +180,7 @@ def visualize_deg_results(result_df, sex_label, output_dir):
     
     return fig
 
-def create_volcano_plot(degs, cell_type, top_n=10, xlim=(-5, 5), save=True):
+def create_volcano_plot(degs, cell_type, top_n=10, xlim=(-5, 5), title='', save=True):
     """
     Create volcano plot for DEGs
     
@@ -192,6 +192,8 @@ def create_volcano_plot(degs, cell_type, top_n=10, xlim=(-5, 5), save=True):
         Name of cell type
     top_n : int
         Number of top genes to label
+    title : str
+        Title of the plot
     save : bool
         Whether to save the plot
     """
@@ -268,7 +270,7 @@ def create_volcano_plot(degs, cell_type, top_n=10, xlim=(-5, 5), save=True):
     # Labels and title
     ax.set_xlabel('Log2 Fold Change (KO / WT)', fontsize=12, fontweight='bold')
     ax.set_ylabel('-Log10(Adjusted P-value)', fontsize=12, fontweight='bold')
-    ax.set_title(f'{cell_type}\nKO vs WT', fontsize=14, fontweight='bold', pad=20)
+    ax.set_title(f'{cell_type} + {title}\nKO vs WT', fontsize=14, fontweight='bold', pad=20)
     
     # Set x-axis limits
     if xlim:
