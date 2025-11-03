@@ -50,7 +50,7 @@ saveRDS(male_h5ad, file.path(out_path, "male_integrated.rds"))
 # Load the QC filtered seurat object with cell embeddings 
 ``` {r Reading seurat object}
 # reads the QC pre-processed seurat obj, which contains one layer for all sample cells (merged), and 10 cell-type labels
-seurat_obj <- readRDS(file.path(out_path, "female_integrated.rds"))
+seurat_obj <- readRDS(file.path(out_path, "male_integrated.rds"))
 # Subset to Skeleton MuSc cells only
 seurat_stem <- subset(seurat_obj, subset = C_scANVI == "Skeleton MuSc")
 
@@ -138,10 +138,20 @@ DEG_analysis <- function(gender_ko, gender_wt, cell_type, gender) {
     y = "p_val_adj",
     pCutoff = significance_filter,
     FCcutoff = FC_threshold,
-    pointSize = 2,
+    pointSize = 4,              # Larger, more visible points
+    labSize = 8.0,                # Larger gene labels
+    axisLabSize = 18,             # Larger axis labels
+    titleLabSize = 20,            # Larger title
+    subtitleLabSize = 16,         # Larger subtitle
+    captionLabSize = 14,          # Larger caption
     drawConnectors = TRUE,
+    widthConnectors = 0.5,        # Thicker connector lines
     title = title,
-    ylim = c(0, 5.0)
+    xlim = c(-2.5, 2.5),              # Zoom in on x-axis
+    ylim = c(0, 4),              # More zoomed in y-axis
+    colAlpha = 0.8,               # Slight transparency for overlapping points
+    gridlines.major = FALSE,      # Cleaner look
+    gridlines.minor = FALSE
   )
   ggsave(plot_png, plot = Vol_DEG, width = 10.1, height = 10.1)
 
