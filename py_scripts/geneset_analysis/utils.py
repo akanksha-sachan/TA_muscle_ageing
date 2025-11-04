@@ -425,6 +425,152 @@ def get_cell_type_percentages_by_sex(adata, cell_type_label='cell_type'):
     })
     return df
 
+def calculate_sc_score(data, up_genes=None, down_genes=None, condition_col='condition'):
+    """
+    Calculate geneset signature scores for each sample based on gene-sets with directionality
+    
+    Parameters:
+    -----------
+    data : pd.DataFrame or AnnData
+        Expression data. If DataFrame, genes should be rows and samples columns.
+        If AnnData, will be converted automatically (cells x genes -> genes x cells)
+    up_genes : list, optional
+        List of upregulated genes in the signature
+    down_genes : list, optional
+        List of downregulated genes in the signature
+    condition_col : str, optional
+        Name of the condition column in adata.obs to include in results (default: 'condition')
+    """
+    import scipy.sparse as sp
+    
+    if up_genes is None and down_genes is None:
+        raise ValueError("At least one of up_genes or down_genes must be provided")
+    
+    # Store condition info if AnnData
+    condition_info = None
+    
+    # Check if input is AnnData and convert to DataFrame
+    if hasattr(data, 'X'):  # Check if it's an AnnData object
+        print("Converting AnnData to DataFrame...")
+        
+        # Extract condition information before conversion
+        if condition_col in data.obs.columns:
+            condition_info = data.obs[condition_col].copy()
+            print(f"Extracted '{condition_col}' column from obs")
+        
+        # Convert sparse matrix to dense if needed
+        if sp.issparse(data.X):
+            expr_matrix = data.X.toarray()
+        else:
+            expr_matrix = data.X
+        
+        # Create DataFrame with genes as rows, cells as columns (transpose)
+        data = pd.DataFrame(
+            expr_matrix.T,  # Transpose: genes x cells
+            index=data.var_names,  # Gene names
+            columns=data.obs_names  # Cell/sample names
+        )
+        print(f"Converted to DataFrame with shape: {data.shape} (genes x cells)")
+    
+    # Set index to gene names if not already done
+    if "NAME" in data.columns:
+        data = data.set_index("NAME")
+    if "Description" in data.columns:
+        data = data.drop("Description", axis=1)
+    
+    # Check which genes are present in the expression data
+    available_genes = set(data.index)
+    
+    # Process up-regulated genes
+    if up_genes is not None:
+        up_genes_set = set(up_genes)
+        up_genes = list(up_genes_set.intersection(available_genes))
+        print(f"Using {len(up_genes)} upregulated genes")
+    
+    # Process down-regulated genes
+    if down_genes is not None:
+        down_genes_set = set(down_genes)
+        down_genes = list(down_genes_set.intersection(available_genes))
+        print(f"Using {len(down_genes)} downregulated genes")
+    
+    # Check if we have enough genes to proceed
+    if (up_genes is None or len(up_genes) == 0) and (
+        down_genes is None or len(down_genes) == 0
+    ):
+        raise ValueError(
+            "No genes from the gene sets were found in the expression data"
+        )
+    
+    sample_names = data.columns
+    expr_matrix = data.select_dtypes(include=[np.number])
+    
+    # Z-standardize the expression values across samples
+    z_standardized = (
+        expr_matrix - expr_matrix.mean(axis=1).values.reshape(-1, 1)
+    ) / expr_matrix.std(axis=1).values.reshape(-1, 1)
+    
+    # Calculate scores for each sample
+    scores = pd.Series(0, index=sample_names)
+    
+    # Calculate total gene set size for normalization
+    total_genes = 0
+    if up_genes:
+        total_genes += len(up_genes)
+    if down_genes:
+        total_genes += len(down_genes)
+    
+    # Calculate combined score with size normalization
+    if up_genes:
+        up_score = z_standardized.loc[up_genes].sum()
+        scores += up_score
+    if down_genes:
+        down_score = z_standardized.loc[down_genes].sum()
+        scores -= down_score  # Subtract because these are down-regulated
+    
+    # Normalize by square root of gene set size
+    scores = scores / np.sqrt(total_genes)
+    
+    # Final z-score normalization across samples
+    scores = (scores - scores.mean()) / scores.std()
+    
+    # Convert to DataFrame with meaningful column name
+    scores_df = pd.DataFrame(scores, columns=["senescence_score"])
+    
+    # Add condition column if available
+    if condition_info is not None:
+        scores_df[condition_col] = condition_info.values
+    
+    return scores_df
+    
+def calculate_pairwise_significance(data, groups, x_var, y_var):
+    """
+    Calculate pairwise significance between all groups
+    Returns a dictionary of p-values and significance levels
+    """
+    from scipy import stats
+    results = {}
+    for i in range(len(groups)):
+        for j in range(i + 1, len(groups)):
+            group1 = data[data[x_var] == groups[i]][y_var]  # Changed from 'category' and 'senescence_score'
+            group2 = data[data[x_var] == groups[j]][y_var]  # Changed from 'category' and 'senescence_score'
+            
+            # Perform Mann-Whitney U test
+            statistic, pvalue = stats.mannwhitneyu(group1, group2, alternative='two-sided')
+            
+            # Add significance stars
+            if pvalue < 0.001:
+                sig = '***'
+            elif pvalue < 0.01:
+                sig = '**'
+            elif pvalue < 0.05:
+                sig = '*'
+            else:
+                sig = 'ns'
+                
+            results[(i, j)] = {'p-value': pvalue, 'significance': sig}
+    
+    return results
+    
 def plot_violin_box_combo(data, x_var, y_var, title=None, x_ticks=None, palette=None, rotation=45):
     """
     Create a combined violin-box plot with consistent colors for all elements
@@ -520,7 +666,7 @@ def plot_violin_box_combo(data, x_var, y_var, title=None, x_ticks=None, palette=
     
     # Calculate significance
     categories = data[x_var].unique()
-    significance_info = calculate_pairwise_significance(data, categories)
+    significance_info = calculate_pairwise_significance(data, categories, x_var, y_var)
 
     # Add significance bar
     def add_significance_bar(start, end, height, p_value, sig_symbol):
@@ -592,32 +738,3 @@ def plot_violin_box_combo(data, x_var, y_var, title=None, x_ticks=None, palette=
     plt.close()
     
     return fig
-
-def calculate_pairwise_significance(data, groups):
-    """
-    Calculate pairwise significance between all groups
-    Returns a dictionary of p-values and significance levels
-    """
-    from scipy import stats
-    results = {}
-    for i in range(len(groups)):
-        for j in range(i + 1, len(groups)):
-            group1 = data[data['category'] == groups[i]]['senescence_score']
-            group2 = data[data['category'] == groups[j]]['senescence_score']
-            
-            # Perform Mann-Whitney U test
-            statistic, pvalue = stats.mannwhitneyu(group1, group2, alternative='two-sided')
-            
-            # Add significance stars
-            if pvalue < 0.001:
-                sig = '***'
-            elif pvalue < 0.01:
-                sig = '**'
-            elif pvalue < 0.05:
-                sig = '*'
-            else:
-                sig = 'ns'
-                
-            results[(i, j)] = {'p-value': pvalue, 'significance': sig}
-    
-    return results
