@@ -10,6 +10,9 @@ import gseapy as gp
 import decoupler as dc
 import scanpy as sc
 
+from pathlib import Path
+from itertools import chain, repeat
+
 def perform_deg_analysis(adata_subset, output_dir, layer='log1p_norm_cb', condition_column='condition', reference='WT', comparison='KO', 
                         sex_label=''):
     """
@@ -571,43 +574,71 @@ def calculate_pairwise_significance(data, groups, x_var, y_var):
     
     return results
     
-def plot_violin_box_combo(data, x_var, y_var, title=None, x_ticks=None, palette=None, rotation=45):
+def plot_violin_box_combo(data, x_var, y_var, title=None, x_ticks=None, palette=None, rotation=45, show_scatter=True):
     """
-    Create a combined violin-box plot with consistent colors for all elements
+    Create a combined violin-box plot with optional scatter points
+    
+    Parameters:
+    -----------
+    show_scatter : bool, default=True
+        If True, shows individual data points as scatter. If False, shows only violin and box.
     """
     plt.clf()
-    # Reduce figure width and adjust spacing
     fig, ax = plt.subplots(figsize=(5, 6))
     
-    # Adjust plot margins
     plt.subplots_adjust(left=0.15, right=0.85, bottom=0.1, top=0.9)
 
     # Calculate y-axis limits based on data
     y_min = data[y_var].min()
     y_max = data[y_var].max()
+    y_range = y_max - y_min
     
-    # Add padding and round to nearest 0.5
-    y_min = np.floor(y_min * 2) / 2
-    y_max = np.ceil(y_max * 2) / 2
+    # Add padding proportional to the data range (10% on each side)
+    padding = y_range * 0.1
+    y_min_plot = y_min - padding
+    y_max_plot = y_max + padding
     
-    # Set y-axis limits and ticks
-    ax.set_ylim(y_min, y_max)
-    ax.yaxis.set_major_locator(plt.MultipleLocator(0.5))  # Set tick intervals to 0.5
+    # Only use floor/ceil if the range is large enough
+    if y_range > 1.0:
+        y_min_plot = np.floor(y_min_plot * 2) / 2
+        y_max_plot = np.ceil(y_max_plot * 2) / 2
+    else:
+        y_min_plot = max(0, y_min_plot)
+    
+    # Set initial y-axis limits
+    ax.set_ylim(y_min_plot, y_max_plot)
+    
+    # Set appropriate tick intervals based on data range
+    if y_range < 0.1:
+        tick_interval = 0.02
+    elif y_range < 0.5:
+        tick_interval = 0.05
+    elif y_range < 2.0:
+        tick_interval = 0.1
+    else:
+        tick_interval = 0.5
+    
+    ax.yaxis.set_major_locator(plt.MultipleLocator(tick_interval))
 
-    # Create violin plot in the background
+    # Determine order
+    if x_ticks is not None:
+        categories = x_ticks
+    else:
+        categories = sorted(data[x_var].unique(), key=lambda x: float(x) if x.replace('.','').isdigit() else x)
+
+    # Create violin plot with explicit order
     violin = sns.violinplot(
         data=data, x=x_var, y=y_var,
+        order=categories,
         palette=palette, inner=None,
         linewidth=0, saturation=1.0,
         alpha=0.3, width=0.4, cut=0
     )
 
-    # Get the unique categories in the order they appear
-    categories = data[x_var].unique()
-
-    # Create box plot with correct colors from the start
+    # Create box plot with explicit order
     box_plot = sns.boxplot(
         data=data, x=x_var, y=y_var,
+        order=categories,
         width=0.4, linewidth=1.2,
         flierprops={'marker': ' '},
         showmeans=False,
@@ -656,40 +687,48 @@ def plot_violin_box_combo(data, x_var, y_var, title=None, x_ticks=None, palette=
             line.set_linewidth(1.2)
             line.set_zorder(2)
 
-    # Add individual points on top
-    sns.stripplot(
-        data=data, x=x_var, y=y_var,
-        palette=palette, size=6,
-        alpha=1.0, linewidth=0,
-        jitter=0.2, zorder=3
-    )
+    # ========== CONDITIONAL SCATTER POINTS ==========
+    if show_scatter:
+        # Add individual points on top with explicit order
+        sns.stripplot(
+            data=data, x=x_var, y=y_var,
+            order=categories,
+            palette=palette, size=6,
+            alpha=1.0, linewidth=0,
+            jitter=0.2, zorder=3
+        )
+    # ================================================
     
-    # Calculate significance
-    categories = data[x_var].unique()
+    # Calculate significance using the ordered categories
     significance_info = calculate_pairwise_significance(data, categories, x_var, y_var)
 
-    # Add significance bar
+    # Get current y limits before adding bars
+    current_ymin, current_ymax = ax.get_ylim()
+    y_range_plot = current_ymax - current_ymin
+    
+    # Make bar spacing relative to the data range
+    bar_spacing = y_range_plot * 0.08
+    bar_tips = y_range_plot * 0.02
+    bar_height = current_ymax + bar_spacing * 0.5
+
+    # Add significance bar function
     def add_significance_bar(start, end, height, p_value, sig_symbol):
-        bar_height = height
-        bar_tips = 0.05
-        
         # Draw the bar
         ax.plot([start, start, end, end], 
-                [bar_height, bar_height + bar_tips, bar_height + bar_tips, bar_height],
+                [height, height + bar_tips, height + bar_tips, height],
                 color='black', linewidth=0.8)
         
-        # Add text
-        text = f'p = {p_value:.4f} {sig_symbol}'
-        ax.text((start + end) * 0.5, bar_height + bar_tips, 
+        # If p-value rounds to 0.0000 (very small), show only asterisks
+        if p_value < 0.00005:  # This rounds to 0.0000 with 4 decimals
+            text = sig_symbol  # Just "***"
+        else:
+            text = f'p = {p_value:.4f} {sig_symbol}'  # "p = 0.0123 **"
+        ax.text((start + end) * 0.5, height + bar_tips, 
                 text, ha='center', va='bottom', fontsize=8)
-
-    # Get current y limits
-    current_ymin, current_ymax = ax.get_ylim()
-    bar_height = current_ymax + 0.15
 
     # Add significant bars (p < 0.05 only)
     for (group1_idx, group2_idx), sig_data in significance_info.items():
-        if sig_data['significance'] != 'ns':  # Only show significant comparisons
+        if sig_data['significance'] != 'ns':
             add_significance_bar(
                 group1_idx, 
                 group2_idx, 
@@ -697,10 +736,10 @@ def plot_violin_box_combo(data, x_var, y_var, title=None, x_ticks=None, palette=
                 sig_data['p-value'],
                 sig_data['significance']
             )
-            bar_height += 0.15  # Increment height for next bar
+            bar_height += bar_spacing
 
     # Adjust y-axis limits to accommodate bars
-    ax.set_ylim(current_ymin, bar_height + 0.1)
+    ax.set_ylim(current_ymin, bar_height + bar_spacing * 0.5)
 
     if title:
         plt.title(title, pad=20)
@@ -711,7 +750,7 @@ def plot_violin_box_combo(data, x_var, y_var, title=None, x_ticks=None, palette=
     else:
         ax.set_xticks(range(len(x_ticks)))
         ax.set_xticklabels(x_ticks, rotation=rotation, ha='right')
-        plt.setp(ax.get_xticklabels(), rotation=rotation, ha='right')  # Add this line
+        plt.setp(ax.get_xticklabels(), rotation=rotation, ha='right')
         ax.spines['bottom'].set_visible(True)
 
     # Configure ticks and spines with thinner lines
@@ -738,3 +777,13 @@ def plot_violin_box_combo(data, x_var, y_var, title=None, x_ticks=None, palette=
     plt.close()
     
     return fig
+
+def gmt_to_decoupler_multiple_pathways(gmt_paths, geneset_name=None, genesymbol_name=None):
+    """Parse multiple gmt files and return a combined decoupler pathway dataframe."""
+    all_records = []
+    for pth in gmt_paths:
+        with Path(pth).open("r") as f:
+            for line in f:
+                name, _, *genes = line.strip().split("\t")
+                all_records.extend(zip(repeat(name), genes))
+    return pd.DataFrame.from_records(all_records, columns=[geneset_name, genesymbol_name])
