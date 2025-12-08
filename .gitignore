@@ -2,7 +2,7 @@
 *.h5ad
 
 # Logs and temporary files
-py_scripts/preproc/lightning_logs/s
+py_scripts/preproc/lightning_logs
 bash_scripts/*.log
 py_scripts/slide_analysis/tutorial_outputs
 py_scripts/slide_analysis/meta_cell_outputs
