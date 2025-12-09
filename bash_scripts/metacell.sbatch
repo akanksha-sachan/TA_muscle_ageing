@@ -1,51 +1,92 @@
 #!/bin/bash
-#SBATCH --job-name="metacell_fast2b_2x_scANVI_basis"
-#SBATCH --output="metacell_fast2b_2x_scANVI_basis.log"
+#SBATCH --job-name="metacell_fast2b_array"
+#SBATCH --output="metacell_%A_%a.log"
 #SBATCH -p RM-shared
 #SBATCH -N 1
 #SBATCH --ntasks-per-node=64
 #SBATCH -t 01:00:00
+#SBATCH --array=0-5
 
-# Set working directory where the python script is located
+# ------------------------------------------------------------------
+# CONFIGURATION
+# ------------------------------------------------------------------
+
+SAMPLES=("F3_WT" "F4_WT" "F7_KO" "F15_WT" "F706_KO" "F785_KO")
+
+# Get the sample ID for this specific array task
+CURRENT_SAMPLE=${SAMPLES[$SLURM_ARRAY_TASK_ID]}
+
+echo "Processing Array Task: $SLURM_ARRAY_TASK_ID"
+echo "Target Sample ID: $CURRENT_SAMPLE"
+
+# 2. Set Paths
 WORK_DIR="/ocean/projects/cis240075p/asachan/datasets/TA_muscle/ERCC1_KO_mice/integrated_samples"
+INPUT_ADATA="${WORK_DIR}/adata_harmony_v2.h5ad"
+BASE_RESULTS_DIR="${WORK_DIR}/analysis/meta_cell_fast2b_2x"
+
+
 cd $WORK_DIR || { echo "Error: Could not change directory to $WORK_DIR"; exit 1; }
 
-# Load necessary modules and activate the environment
-# Load GCC first to provide newer libstdc++ (GLIBCXX_3.4.29)
-module load gcc/13.3.1-p20240614
+# ------------------------------------------------------------------
+# ENVIRONMENT SETUP
+# ------------------------------------------------------------------
 
+module load gcc/13.3.1-p20240614
 module load anaconda3/2022.10
-eval "$(conda shell.bash hook)"  # Proper conda initialization
+eval "$(conda shell.bash hook)"
 conda activate metasheller-py311
 
-# Define file paths as bash variables
-adata_file = "/ocean/projects/cis240075p/asachan/datasets/TA_muscle/ERCC1_KO_mice/integrated_samples/seacells_F_FastIIB_FastIIX.h5ad"
+# ------------------------------------------------------------------
+# RUN PYTHON
+# ------------------------------------------------------------------
 
-# Run metacell
-echo "Running metacell for batch fast2b_2x_scANVI_basis"
+echo "Running metacell for $CURRENT_SAMPLE"
 
-########################## Python script ##########################
+# We pass bash variables to python using sys.argv
 python -c "
-import scanpy as sc 
+import sys
+import os
+import scanpy as sc
 import metashells as ms
-from metashells.seashells import SeaShells 
+from metashells.seashells import SeaShells
 
-import os 
+target_sample = sys.argv[1]
+base_out_dir = sys.argv[2]
+adata_path = sys.argv[3]
 
-results_dir = './meta_cell_outs_fast2b_2x_scANVI_basis'
+print(f'Python script started for sample: {target_sample}')
+
+# This prevents different jobs from overwriting the same files
+results_dir = os.path.join(base_out_dir, target_sample)
 os.makedirs(results_dir, exist_ok=True)
 
-adata = sc.read_h5ad('/ocean/projects/cis240075p/asachan/datasets/TA_muscle/ERCC1_KO_mice/integrated_samples/adata_harmony_v2.h5ad')
-adata.obsm['X_pca'] = adata.obsm['X_pca_harmony']
+print(f'Loading data from {adata_path}...')
+adata = sc.read_h5ad(adata_path)
 
+# if 'X_pca_harmony' in adata.obsm.keys():
+#     adata.obsm['X_pca'] = adata.obsm['X_pca_harmony']
+# else:
+#     print('Warning: X_pca_harmony not found, using existing X_pca')
+
+print(f'Subsetting to sample_id == {target_sample}...')
+adata_subset = adata[adata.obs['sample_id'] == target_sample].copy()
+adata_subset = adata_subset[adata_subset.obs['C_scANVI'].isin(['Fast IIB', 'Fast IIX'])]
+print(f'Subset shape: {adata_subset.shape}')
+
+if adata_subset.n_obs == 0:
+    print(f'Error: No cells found for sample {target_sample}. Check spelling.')
+    sys.exit(1)
+
+print('Initializing SeaShells...')
 conch = SeaShells(
-    adata_full = adata, 
+    adata_full = adata_subset,
     results_dir = results_dir,
-    cells_per_metacell = 75, # recommended is 75 but can go as low as ~20 if really needed
-    sample_col = 'sample_id'
+    cells_per_metacell = 75,
+    sample_col = 'sample_id' 
 )
-conch.run()
-"
 
-# Log completion of the batch
-echo "Done with metacell for batch fast2b_2x_scANVI_basis"
+conch.run()
+print('SeaShells run complete.')
+" "$CURRENT_SAMPLE" "$BASE_RESULTS_DIR" "$INPUT_ADATA"
+
+echo "Done with metacell for $CURRENT_SAMPLE"
