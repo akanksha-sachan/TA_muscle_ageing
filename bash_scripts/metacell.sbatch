@@ -11,7 +11,7 @@
 # CONFIGURATION
 # ------------------------------------------------------------------
 
-SAMPLES=("F3_WT" "F4_WT" "F7_KO" "F15_WT" "F706_KO" "F785_KO")
+SAMPLES=("M2_WT" "M4_KO" "M6_WT" "M11_WT" "M764_KO" "M784_KO")
 
 # Get the sample ID for this specific array task
 CURRENT_SAMPLE=${SAMPLES[$SLURM_ARRAY_TASK_ID]}
@@ -63,10 +63,10 @@ os.makedirs(results_dir, exist_ok=True)
 print(f'Loading data from {adata_path}...')
 adata = sc.read_h5ad(adata_path)
 
-# if 'X_pca_harmony' in adata.obsm.keys():
-#     adata.obsm['X_pca'] = adata.obsm['X_pca_harmony']
-# else:
-#     print('Warning: X_pca_harmony not found, using existing X_pca')
+if 'X_pca_harmony' in adata.obsm.keys():
+    adata.obsm['X_pca'] = adata.obsm['X_pca_harmony']
+else:
+    print('Warning: X_pca_harmony not found, using existing X_pca')
 
 print(f'Subsetting to sample_id == {target_sample}...')
 adata_subset = adata[adata.obs['sample_id'] == target_sample].copy()
