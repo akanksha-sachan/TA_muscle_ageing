@@ -52,21 +52,21 @@ saveRDS(male_h5ad, file.path(out_path, "male_integrated.rds"))
 # reads the QC pre-processed seurat obj, which contains one layer for all sample cells (merged), and 10 cell-type labels
 seurat_obj <- readRDS(file.path(out_path, "male_integrated.rds"))
 # Subset to Skeleton MuSc cells only
-seurat_stem <- subset(seurat_obj, subset = C_scANVI == "Skeleton MuSc")
+seurat_subset <- subset(seurat_obj, subset = C_scANVI == "Fast IIB")
 
 # Check the subset
 print(paste("Original cells:", ncol(seurat_obj)))
-print(paste("Skeleton MuSc cells:", ncol(seurat_stem)))
-print(table(seurat_stem$C_scANVI))
+print(paste("Fast IIB cells:", ncol(seurat_subset)))
+print(table(seurat_subset$C_scANVI))
 ```
 ```{r print colors from a palette}
 DiscretePalette(n = 6, palette = "alphabet", shuffle = FALSE) 
 # set colors for each cell_cluster ('#1f77b4', '#ff7f0e', '#279e68', '#17becf', '#aa40fc', '#8c564b', '#d62728', '#b5bd61', '#e377c2', '#aec7e8', '#ffbb78')
 ```
 ```{r plot umaps}
-umap_sample <- DimPlot(seurat_stem, reduction = "umap", label = FALSE, label.size = 6, group.by = "condition", pt.size = 1) + 
-               ggtitle("Female Skeleton MuSc UMAP")
-ggsave(file.path(out_path, "/plots/female_musc_umap.png"), plot = umap_sample, width = 10.1, height = 10.1)
+umap_sample <- DimPlot(seurat_subset, reduction = "umap", label = FALSE, label.size = 6, group.by = "condition", pt.size = 1) + 
+               ggtitle("Male Fast IIB UMAP")
+ggsave(file.path(out_path, "/plots/male_fast_iib_umap.png"), plot = umap_sample, width = 10.1, height = 10.1)
 ```
 
 
@@ -102,16 +102,16 @@ ggsave(file.path(out_path, "/plots/female_musc_umap.png"), plot = umap_sample, w
 #seurat_obj <- subset(seurat_obj, features = filtered_genes)
 
 # Check the new gene list without mt- genes
-print(head(rownames(seurat_stem)))
+print(head(rownames(seurat_subset)))
 ```
 
 ################################## DEGs specific to gender (M/F) ##################################
 ```{r updating orig.ident with sample+condition_celltype for FindMarkers function}
-metadata <- seurat_stem@meta.data
+metadata <- seurat_subset@meta.data
 metadata$orig.ident <- paste(metadata$condition, metadata$C_scANVI, sep = "_")
-Idents(seurat_stem) <- metadata$orig.ident
-seurat_stem@meta.data <- metadata
-print(head(seurat_stem@meta.data))
+Idents(seurat_subset) <- metadata$orig.ident
+seurat_subset@meta.data <- metadata
+print(head(seurat_subset@meta.data))
 ```
 ```{r function for gender specific DEG}
 DEG_analysis <- function(gender_ko, gender_wt, cell_type, gender) {
@@ -120,12 +120,12 @@ DEG_analysis <- function(gender_ko, gender_wt, cell_type, gender) {
   wt_ident <- paste0(gender_wt, "_", cell_type)
   title <- paste0(cell_type, paste0(": DEGs in KO vs. WT for ", gender, " samples"))
   unfiltered_csv <- file.path(out_path, paste0("/tables/", gender, "_", cell_type, "_integrated_KO_DEGs_nmt.csv"))
-  plot_png <- file.path(out_path, paste0("/plots/", gender, "_", cell_type, "_integrated_KO_DEGs_nmt.png"))
+  plot_png <- file.path(out_path, paste0("/plots/", gender, "_", cell_type, "_integrated_KO_DEGs.pdf"))
   upregulated_csv <- file.path(out_path, paste0("/tables/", gender, "_", cell_type, "_integrated_upregulated_KO_DEGs_nmt.csv"))
   downregulated_csv <- file.path(out_path, paste0("/tables/", gender, "_", cell_type, "_integrated_downregulated_KO_DEGs_nmt.csv"))
 
   # Find markers
-  markers <- FindMarkers(seurat_stem, ident.1 = ko_ident, ident.2 = wt_ident, verbose = TRUE)
+  markers <- FindMarkers(seurat_subset, ident.1 = ko_ident, ident.2 = wt_ident, verbose = TRUE)
   write.csv(markers, unfiltered_csv)
   df <- markers
 
@@ -163,8 +163,9 @@ DEG_analysis <- function(gender_ko, gender_wt, cell_type, gender) {
   write.csv(downregulated_KO_DEGs, downregulated_csv)
 }
 # run the function: params - sample_KO, sample_WT, cell_type (Fast IIX, Fast IIB, FAPs, Skeleton MuSc), Female/Male
-DEG_analysis("KO", "WT", "Skeleton MuSc", "Male")
+DEG_analysis("KO", "WT", "Fast IIB", "Male")
 ```
+
 ################################## Genes of interest in Cell embeddings ##################################
 # Genes of interest: CDKN1A/MYH8/COL19A1/LRRK2/EDAR2/ and ATP2A1; common genes between MF (MALAT1, mt-co2, mt-co3, mt-atp6)
 ```{r ercc1, ercc4}
