@@ -28,97 +28,130 @@ library(openxlsx)
 library(harmony)
 library(SingleR)
 library(reticulate)
-#library(MuDataSeurat) #to convert Rds to h5ad
+library(MuDataSeurat) #to convert Rds to h5ad
 library(EnhancedVolcano)
 
 # Directories
-out_path <- "/ix/djishnu/Akanksha/snRNA_TA_muscle_analysis/Seurat_analysis_outputs"
-sample_names <- c("F7_KO", "F15_WT", "M4_KO", "M11_WT")
+out_path <- "/ix/djishnu/Akanksha/analysis_code/snRNA_TA_muscle_analysis/Seurat_analysis_outputs"
+dir.exists(file.path(out_path))
+sample_names_female <- c('F3_WT', 'F4_WT', 'F15_WT', 'F7_KO', 'F706_KO', 'F785_KO')
+sample_names_male <- c('M2_WT', 'M6_WT', 'M11_WT', 'M4_KO', 'M764_KO', 'M784_KO')
 ```
-
+# Load scanpy preprocessing output
+``` {r H5ad to Rds}
+Sys.setenv(HDF5_PLUGIN_PATH = "")
+# Read h5ad files back into Seurat objects
+female_h5ad <- MuDataSeurat::ReadH5AD("/ix/djishnu/Akanksha/datasets/ERCC1_KO_mice/objects/female_98_80_dense.h5ad")
+male_h5ad <- MuDataSeurat::ReadH5AD("/ix/djishnu/Akanksha/datasets/ERCC1_KO_mice/objects/male_98_85_dense.h5ad")
+# Save as RDS files
+saveRDS(female_h5ad, file.path(out_path, "female_integrated.rds"))
+saveRDS(male_h5ad, file.path(out_path, "male_integrated.rds"))
+```
 # Load the QC filtered seurat object with cell embeddings 
 ``` {r Reading seurat object}
 # reads the QC pre-processed seurat obj, which contains one layer for all sample cells (merged), and 10 cell-type labels
-seurat_obj <- readRDS(file.path(out_path, "/objects/Seurat_cell_type_labeled_all_cells.rds"))
-print(head(seurat_obj@meta.data))
+seurat_obj <- readRDS(file.path(out_path, "male_integrated.rds"))
+# Subset to Skeleton MuSc cells only
+seurat_stem <- subset(seurat_obj, subset = C_scANVI == "Skeleton MuSc")
+
+# Check the subset
+print(paste("Original cells:", ncol(seurat_obj)))
+print(paste("Skeleton MuSc cells:", ncol(seurat_stem)))
+print(table(seurat_stem$C_scANVI))
 ```
 ```{r print colors from a palette}
-DiscretePalette(n = 4, palette = "alphabet", shuffle = FALSE)
+DiscretePalette(n = 6, palette = "alphabet", shuffle = FALSE) 
+# set colors for each cell_cluster ('#1f77b4', '#ff7f0e', '#279e68', '#17becf', '#aa40fc', '#8c564b', '#d62728', '#b5bd61', '#e377c2', '#aec7e8', '#ffbb78')
 ```
 ```{r plot umaps}
-umap_sample <- DimPlot(seurat_obj, reduction = "umap", label = TRUE, group.by = "orig.ident", cols = c("#FF5733", "#33FF57", "#3357FF", "#FFD700"), pt.size = 1)
-ggsave(file.path(out_path, "/plots/mouse_sample_labels.png"), plot = umap_sample, width = 10.1, height = 10.1)
+umap_sample <- DimPlot(seurat_stem, reduction = "umap", label = FALSE, label.size = 6, group.by = "condition", pt.size = 1) + 
+               ggtitle("Female Skeleton MuSc UMAP")
+ggsave(file.path(out_path, "/plots/female_musc_umap.png"), plot = umap_sample, width = 10.1, height = 10.1)
 ```
+
+
+
 ################################## UMAPs specific to gender (M/F) ##################################
 ```{r split the whole seurat object into gender specific objects}
 # split the object based on condition metadata
-gender_obj_list <- SplitObject(seurat_obj, split.by = "gender")
-gender_obj_list$F
-print(head(gender_obj_list$F@meta.data))
-gender_obj_list$M
-print(head(gender_obj_list$M@meta.data))
+#gender_obj_list <- SplitObject(seurat_obj, split.by = "gender")
+#gender_obj_list$F
+#print(head(gender_obj_list$F@meta.data))
+#gender_obj_list$M
+#print(head(gender_obj_list$M@meta.data))
 ```
 ```{r plot MF sample umaps}
 # plot umaps
 # "#FF5733", "#33FF57" for females
-umap_F_sample <- DimPlot(gender_obj_list$F, reduction = "umap", label = TRUE, group.by = "orig.ident", cols = c("#FF5733", "#33FF57"), pt.size = 1)
-ggsave(file.path(out_path, "/plots/female_sample_labels.png"), plot = umap_F_sample, width = 10.1, height = 10.1)
-umap_M_sample <- DimPlot(gender_obj_list$M, reduction = "umap", label = TRUE, group.by = "orig.ident", cols = c("#3357FF", "#FFD700"), pt.size = 1)
-ggsave(file.path(out_path, "/plots/male_sample_labels.png"), plot = umap_M_sample, width = 10.1, height = 10.1)
+#umap_F_sample <- DimPlot(gender_obj_list$F, reduction = "umap", label = TRUE, group.by = "orig.ident", cols = c("#FF5733", "#33FF57"), pt.size = 1)
+#ggsave(file.path(out_path, "/plots/female_sample_labels.png"), plot = umap_F_sample, width = 10.1, height = 10.1)
+#umap_M_sample <- DimPlot(gender_obj_list$M, reduction = "umap", label = TRUE, group.by = "orig.ident", cols = c("#3357FF", "#FFD700"), pt.size = 1)
+#ggsave(file.path(out_path, "/plots/male_sample_labels.png"), plot = umap_M_sample, width = 10.1, height = 10.1)
 ```
 
 # DEG analysis for Female and Male cell populations
 ################################## Filtering out non-nuclear DNA mapped genes before DEGs #######################
 ``` {r filtering mitochondrial mt-named genes}
 # Get the gene names
-all_genes <- rownames(seurat_obj)
+#all_genes <- rownames(seurat_obj)
 
 # Filter out the genes that start with "mt-"
-filtered_genes <- all_genes[!grepl("^mt-", all_genes)]
+#filtered_genes <- all_genes[!grepl("^mt-", all_genes)]
 
 # Subset the Seurat object to exclude mitochondrial genes
-seurat_obj <- subset(seurat_obj, features = filtered_genes)
+#seurat_obj <- subset(seurat_obj, features = filtered_genes)
 
 # Check the new gene list without mt- genes
-print(head(rownames(seurat_obj)))
+print(head(rownames(seurat_stem)))
 ```
 
 ################################## DEGs specific to gender (M/F) ##################################
 ```{r updating orig.ident with sample+condition_celltype for FindMarkers function}
-metadata <- seurat_obj@meta.data
-metadata$orig.ident <- paste(metadata$orig.ident, metadata$cell_type, sep = "_")
-Idents(seurat_obj) <- metadata$orig.ident
-seurat_obj@meta.data <- metadata
-print(head(seurat_obj@meta.data))
+metadata <- seurat_stem@meta.data
+metadata$orig.ident <- paste(metadata$condition, metadata$C_scANVI, sep = "_")
+Idents(seurat_stem) <- metadata$orig.ident
+seurat_stem@meta.data <- metadata
+print(head(seurat_stem@meta.data))
 ```
 ```{r function for gender specific DEG}
 DEG_analysis <- function(gender_ko, gender_wt, cell_type, gender) {
   # Define variables
   ko_ident <- paste0(gender_ko, "_", cell_type)
   wt_ident <- paste0(gender_wt, "_", cell_type)
-  title <- paste0(cell_type, paste0(": DEGs in KO vs. WT controls for ", gender, " samples"))
-  unfiltered_csv <- file.path(out_path, paste0("/tables/", gender, "_", cell_type, "_unfiltered_KO_DEGs_nmt.csv"))
-  plot_png <- file.path(out_path, paste0("/plots/", gender, "_", cell_type, "_KO_DEGs_nmt.png"))
-  upregulated_csv <- file.path(out_path, paste0("/tables/", gender, "_", cell_type, "_upregulated_KO_DEGs_nmt.csv"))
-  downregulated_csv <- file.path(out_path, paste0("/tables/", gender, "_", cell_type, "_downregulated_KO_DEGs_nmt.csv"))
+  title <- paste0(cell_type, paste0(": DEGs in KO vs. WT for ", gender, " samples"))
+  unfiltered_csv <- file.path(out_path, paste0("/tables/", gender, "_", cell_type, "_integrated_KO_DEGs_nmt.csv"))
+  plot_png <- file.path(out_path, paste0("/plots/", gender, "_", cell_type, "_integrated_KO_DEGs_nmt.png"))
+  upregulated_csv <- file.path(out_path, paste0("/tables/", gender, "_", cell_type, "_integrated_upregulated_KO_DEGs_nmt.csv"))
+  downregulated_csv <- file.path(out_path, paste0("/tables/", gender, "_", cell_type, "_integrated_downregulated_KO_DEGs_nmt.csv"))
 
   # Find markers
-  markers <- FindMarkers(seurat_obj, ident.1 = ko_ident, ident.2 = wt_ident, verbose = TRUE)
+  markers <- FindMarkers(seurat_stem, ident.1 = ko_ident, ident.2 = wt_ident, verbose = TRUE)
   write.csv(markers, unfiltered_csv)
   df <- markers
 
   # Plot DEGs
-  significance_filter <- 0.01
-  FC_threshold <- 1
+  significance_filter <- 0.05
+  FC_threshold <- 0.5
   Vol_DEG <- EnhancedVolcano(df,
     rownames(df),
     x = "avg_log2FC",
     y = "p_val_adj",
     pCutoff = significance_filter,
     FCcutoff = FC_threshold,
-    pointSize = 2,
+    pointSize = 4,              # Larger, more visible points
+    labSize = 8.0,                # Larger gene labels
+    axisLabSize = 18,             # Larger axis labels
+    titleLabSize = 20,            # Larger title
+    subtitleLabSize = 16,         # Larger subtitle
+    captionLabSize = 14,          # Larger caption
     drawConnectors = TRUE,
-    title = title
+    widthConnectors = 0.5,        # Thicker connector lines
+    title = title,
+    xlim = c(-2.5, 2.5),              # Zoom in on x-axis
+    ylim = c(0, 4),              # More zoomed in y-axis
+    colAlpha = 0.8,               # Slight transparency for overlapping points
+    gridlines.major = FALSE,      # Cleaner look
+    gridlines.minor = FALSE
   )
   ggsave(plot_png, plot = Vol_DEG, width = 10.1, height = 10.1)
 
@@ -130,7 +163,7 @@ DEG_analysis <- function(gender_ko, gender_wt, cell_type, gender) {
   write.csv(downregulated_KO_DEGs, downregulated_csv)
 }
 # run the function: params - sample_KO, sample_WT, cell_type (Fast IIX, Fast IIB, FAPs, Skeleton MuSc), Female/Male
-DEG_analysis("F7_KO", "F15_WT", "Fast IIX", "Female")
+DEG_analysis("KO", "WT", "Skeleton MuSc", "Male")
 ```
 ################################## Genes of interest in Cell embeddings ##################################
 # Genes of interest: CDKN1A/MYH8/COL19A1/LRRK2/EDAR2/ and ATP2A1; common genes between MF (MALAT1, mt-co2, mt-co3, mt-atp6)
